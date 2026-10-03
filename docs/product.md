@@ -17,28 +17,34 @@ _Infernal Affairs_.
 
 ## The consumer experience
 
-The product combines manually curated and source-seeded work pages, genomes, concept pages,
-evidence-backed debate, annotations, citations, and related-context discovery. A visitor can
-highlight a phrase or annotate a concept, cite an existing object, and find that contribution both
-at its original target and through a related concept. Search, recommendations, scenes, timelines,
-and reviewed concept maintenance extend this same experience.
+The knowledge collection grows from external research and native reviews, analysis, and comments.
+Research begins with a caller-selected set of films or television works: find relevant material,
+extract concepts and relationships across those works, and retain the supporting evidence. Native
+publishing adds original contributions and automatically analyzes them into the same collection.
+Manual curation remains available to correct and extend the knowledge.
 
-The [roadmap](roadmap.md) defines the development flow, feature boundaries, and seed-data estimates.
+The backend makes this data queryable before application pages are designed. The application then
+lets people research works, publish and discuss content, explore genomes and concepts, and inspect
+evidence. Precise annotations let readers address particular passages or data objects; citations and
+related-context discovery connect those discussions. Search, recommendations, scenes, timelines, and
+reviewed concept maintenance extend the experience.
+
+The [roadmap](roadmap.md) defines complete deliverables, their prerequisites, and recommended order.
 Features can be built when their behavioral prerequisites exist; business-validation stages do not
 block unrelated work. This document describes intended behavior, not a claim that these features are
 implemented.
 
-A work page should feel useful before it has many contributors. Its seeded claims must identify
-their sources, and the page must distinguish a factual observation from an interpretation. The
-product organizes criticism and discussion; it does not manufacture a generic AI review.
+A work page should feel useful before it has many contributors. Its research-derived claims must
+identify their sources, and the page must distinguish a factual observation from an interpretation.
+The product organizes criticism and discussion; it does not manufacture a generic AI review.
 
 ## Cinematic genome
 
 The genome describes what a work contains and how it works. Candidate dimensions include narrative
 structure and pacing; character arcs and relationships; plot devices; tone; visual grammar; dialogue
 and performance; setting and institutions; themes; and cultural relationships such as genre,
-influence, and adaptation. Manual curation and source-derived observations populate the same genome
-and concept records.
+influence, and adaptation. External research, analysis of native contributions, and manual curation
+populate the same genome and concept records with distinct attribution.
 
 Properties can be factual or interpretive, boolean, categorical, scalar, relational, or temporal.
 For example, a heist can be present, an ending can be ambiguous, one film can influence another, or
@@ -50,22 +56,42 @@ edits, sounds, and timestamps as their target experiences are built. Curated sce
 metadata support these experiences without automated full-video analysis, which is outside committed
 scope.
 
+## Native publishing and discussion
+
+People can create, edit, publish, read, and withdraw reviews and analysis associated with works.
+Comments can address works or contributions, and replies continue those conversations. Authors can
+edit and withdraw their comments and replies. Native publishing does not require an external source
+to have been imported for that contribution. Authorship, revisions, ownership, publication status,
+moderation, and spoiler controls belong to this experience from its first delivery.
+
+Published reviews, analysis, comments, and replies automatically contribute observations, concepts,
+and relationships through analysis. The authored content remains the author's own expression;
+derived knowledge points to the originating contribution and revision. Readers can distinguish an
+author's words from the system's interpretation of them.
+
+Publication remains usable if analysis fails. Authors can inspect analysis status and retry without
+republishing. Published edits trigger fresh analysis and invalidate superseded results. Withdrawal
+or moderation removes inaccessible content from ordinary reading and prevents its text or claims
+from leaking through derived views. Independently supported knowledge can remain with accurate
+attribution. Correcting a derived concept must not rewrite the author's contribution.
+
 ## Annotation, reply, and citation
 
 An **annotation** addresses an object or a precise part of one. A **reply** addresses another
 person's contribution. Keep that distinction even if the interface presents them together. Targets
 include highlighted text, concepts, scenes, and timestamps. Additional target experiences can
-address image regions, chart data, sources, and other annotations. Votes and reviews become targets
-only if their owning features exist.
+address image regions, chart data, sources, reviews, analysis, and other contributions. Reviews and
+analysis already exist through native publishing; votes become targets only if their owning feature
+exists. Precise annotations extend the contribution system rather than introduce publishing.
 
 Contributions may be observations, interpretations, questions, corrections, comparisons, supporting
 evidence, or counterexamples. A reply may agree, disagree, qualify, or ask. These distinctions can
 help organize discussion, but the interface need not expose every type or stance at launch.
 
-A citation is a rich reference to an addressable object, including works, concepts, claims,
-annotations, and sources. With scene targets, an argument about the Overlook Hotel can also cite the
-hallway sequence that supports it. Citations should preserve their target and context as the product
-evolves.
+A citation is a rich reference to an addressable object, including works, concepts, claims, reviews,
+analysis, comments, annotations, and sources. With scene targets, an argument about the Overlook
+Hotel can also cite the hallway sequence that supports it. Citations should preserve their target
+and context as the product evolves.
 
 One annotation can appear in several relevant places without being copied. A note on the diner scene
 in _Heat_ might also appear under professionalism and protagonist-antagonist mirroring. The
@@ -86,10 +112,11 @@ disagreement into a false consensus. Interpretation history shows how evidence a
 change those positions. Voting and confidence indicators remain choices for the relevant feature
 specs.
 
-Manual curation and automated ingestion both use permitted source material to seed pages. Original
-observations, provenance, and claim revisions remain recoverable from entry, before a history or
-concept-maintenance interface consumes them. A link or attribution does not by itself grant
-quotation or republication rights; the [architecture](architecture.md) covers source handling.
+External research and native publishing retain their own provenance while contributing to shared
+knowledge. Manual curation can correct or add to it. Original observations, authored expressions,
+and claim revisions remain recoverable from entry under retention and visibility rules, before a
+history or concept-maintenance interface consumes them. A link or attribution does not by itself
+grant quotation or republication rights; the [architecture](architecture.md) covers source handling.
 
 ## Concepts and language
 
@@ -108,9 +135,9 @@ the authority over contested meanings.
 
 - Concept pages expose meanings, evidence, linked works, and typed relationships. Readers can follow
   explained connections and find projected discussion on the same pages.
-- Semantic search works with curated content and expands with ingestion. Attribute recommendations
-  explain shared genome properties. Private preferences support personalized recommendations,
-  including desired affinities and unwanted qualities.
+- Semantic search covers external research, native content, and curated knowledge. Attribute
+  recommendations explain shared genome properties. Private preferences support personalized
+  recommendations, including desired affinities and unwanted qualities.
 - Scenes, techniques, and discussion density appear along a work's timeline so readers can jump to a
   specific moment.
 - Contribution analytics expose useful aggregate activity without disclosing individual readers.

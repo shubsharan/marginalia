@@ -2,492 +2,306 @@
 
 [Product](product.md) · [Architecture](architecture.md)
 
-Build Marginalia as a connected application for exploring film and television, inspecting evidence,
-and discussing specific ideas and moments. The development flow follows how the product works:
-content enters a shared knowledge model, readers explore it, contributions enrich it, and discovery
-uses those relationships to help people find more.
+Build the backend around external research and native publishing. Both produce a persisted,
+queryable collection of media knowledge. Use that data to design the application, then extend how
+people annotate, discuss, and discover it.
+
+Each numbered deliverable owns a complete workflow, including its writes, reads, and failure
+behavior. The initial backend capabilities are usable through commands or APIs without application
+pages. Their later graphical interface is a separate deliverable, not a prerequisite for completing
+those backend workflows. Search, retrieval, extraction, storage, and querying are implementation
+tasks within research, not separate roadmap features.
+
+The order below is the default delivery sequence. Only stated prerequisites are dependencies;
+independent capabilities need not wait for unrelated work or business-validation gates. Feature IDs
+are scope references, not delivery boundaries.
+
+## Current baseline
+
+The repository contains workspace tooling, shared TypeScript configuration, and Spec Kit setup.
+Product runtime, persistence, and feature specs are not implemented. Everything below is planned.
+Choose the stack, providers, concrete APIs, schemas, and extraction methods in feature plans.
+
+## Initial backend deliverables
+
+### 1. Research a collection of works
+
+Input: A caller-selected set of film or television titles.
+
+Requires: No existing product capability.
+
+Owns the complete research workflow:
+
+- Resolve the intended works, expose ambiguous matches for caller resolution, and discover relevant
+  external sources. Research the selected works together; automatic expansion to other works is
+  outside this deliverable.
+- Retrieve permitted material, retain source identity and locations, and distinguish permission to
+  process from permission to display. Expose source failures, retention rules, and source/copyright
+  complaint handling. Broad ingestion requires the source-rights assessment and legal review.
+- Extract observations, claims, concepts, genome properties, and typed relationships within and
+  across those works. Preserve source passages or permitted references, extraction provenance,
+  revisions, and conflicting interpretations. Expose unsupported results rather than treating them
+  as established knowledge.
+- Persist works and results with stable identities. Provide research submission, status, retry, and
+  queries for works, sources, evidence, concepts, properties, and relationships. Repeated runs
+  accumulate knowledge without blindly duplicating records or erasing disagreement.
+- Include the runtime, persistence, migrations, configuration, authorized research operations, local
+  startup, and deployable backend needed to run this workflow.
 
-The sections below are engineering epics. Each contains proposed feature-spec briefs that describe
-complete workflows across storage, server behavior, and UI. Their order explains how the application
-grows; it is not a serial task queue or a set of business-validation gates. The full consumer
-product is in scope. Commercial offerings and automated full-video analysis remain outside it.
+Output: A stored, inspectable knowledge collection with evidence-backed connections across works.
 
-F-identifiers identify features, not completed spec documents or build steps. No feature spec files
-have been created yet. Each entry below explains its purpose, implementation scope, and completion
-scenario so it can become a spec. F00 names the application runtime work that previously had no ID.
-F23 is explicitly a family of target-specific specs. These are planned capabilities, not implemented
-functionality.
+Complete when: From a fresh checkout, a developer researches several works, queries concepts they
+share, and traces a relationship to supporting source material without an application UI. A failed
+source is visible and retryable; rerunning does not duplicate published results. Ambiguous titles
+and conflicting interpretations remain explicit.
 
-## 1. Application foundation
+Extraction can record source-backed concepts and relationships without waiting for automated
+ontology proposal features. It does not silently settle contested meanings or merge canonical
+concepts. Those changes use the maintenance and review capabilities below.
 
-Establish a running product that can read and write persisted data. The repository currently
-contains workspace tooling and shared TypeScript configuration; product runtime and persistence
-choices still need to be made.
+### 2. Publish and discuss native content
 
-### F00 Application runtime
+Input: User-authored reviews, analysis, and comments associated with existing works or
+contributions.
 
-Give developers a working application to build product features in.
+Requires: Work identities, persistence, and extraction capabilities established by research.
+Publishing does not require an external-source import for the contribution being published.
 
-- Build: Set up the web app, server boundary, persistence, migrations, environment configuration,
-  application shell, and deployable build. Document local startup and add a smoke check. Select the
-  concrete stack in its implementation plan.
-- Complete when: A fresh checkout starts against a configured database, applies migrations, and
-  serves a page backed by persisted data. The build can be deployed. Validate product writes through
-  F01 rather than inventing a throwaway domain.
+Owns the complete native publishing workflow:
 
-### F05 Accounts and access
+- Provide operations to create, edit, publish, read, and withdraw reviews and analysis. Support
+  comments on works and contributions, replies, and bounded conversation retrieval with original
+  context preserved. Comments and replies have the same author-controlled edit and withdrawal
+  lifecycle.
+- Provide sign-in and sign-out, author identity, account controls, ownership checks, revision
+  history, and publication status. Include reporting, moderator review and action, spoiler controls,
+  participation limits, and impersonation complaint handling.
+- Automatically analyze published reviews, analysis, comments, and replies using the extraction
+  capability. Authored content remains the authoritative expression of its author; derived claims,
+  concepts, and relationships identify the originating contribution and revision.
+- Keep publication and reading usable when analysis fails. Expose analysis status and retry without
+  requiring the author to republish. Unpublished content is not input to public knowledge
+  extraction.
+- Reanalyze published edits and invalidate superseded results. Withdrawal or moderation removes
+  inaccessible content from ordinary reads and prevents derived results from exposing it. Preserve
+  independently supported knowledge without retaining unavailable text or misleading attribution.
 
-Let people sign in and ensure each person can perform only the actions their role permits.
+Output: Readable native contributions and conversations, plus attributable derived knowledge in the
+same collection as external research.
 
-- Build: Implement sessions, contributor identity, account controls, ownership checks, and curator
-  and moderator permissions. Apply authorization at server operations as well as in the UI.
-- Complete when: A person can sign in and out. A contributor can edit their own annotation, but
-  cannot edit another person's contribution or access curator and moderator operations without the
-  relevant role.
+Complete when: One user publishes an analysis, another comments, and the backend exposes concepts or
+relationships derived from both with author and revision attribution. Analysis failure leaves the
+contributions readable and retryable. Editing replaces outdated derivations; withdrawal or
+moderation prevents exposure through content queries and derived results. Another account cannot
+edit the author's contribution. Spoiler and moderation decisions apply to every ordinary read.
 
-### Development approach
+### 3. Maintain and refine the knowledge collection
 
-Prove the runtime through the catalogue work below: seed a work, read it from persistence, render
-its page, and save an authorized correction. Build the foundation and this first feature together so
-infrastructure choices have a working use case. Add deployment configuration and a smoke check for
-that path. Avoid a separate exercise in designing infrastructure for every future feature.
+Input: Existing works, claims, evidence, concepts, properties, and relationships needing correction.
 
-**Working result:** A developer can run the application with seed data, sign in, open a work, and
-persist an authorized edit. The same application can be built and deployed.
+Requires: Research records and provenance. Native publishing is needed only when maintaining
+knowledge derived from native contributions.
 
-## 2. Knowledge model and browsing
+Owns authorized inspection, manual creation and correction of works and knowledge records,
+source/evidence entry, concept aliases and reconciliation, merge and split previews and execution,
+deprecation, change history, and accountable reversal. Expose these operations and their results
+through the backend. Retain ambiguous memberships for review and keep original evidence and
+expressions available under their retention and visibility rules.
 
-Give works, concepts, claims, and sources one consistent representation, then expose that model
-through pages readers can navigate. This is the core of the product.
+Output: Corrected, queryable knowledge with an inspectable history and compatible references.
+Curating derived knowledge must not rewrite authored content. Subsequent research and analysis must
+respect recorded corrections rather than silently overwrite them.
 
-### F01 Catalogue and work pages
+Complete when: A curator corrects a relationship, merges duplicate concepts, or splits a combined
+meaning, then inspects and reverses the change. Source attribution, original contributions, and
+existing references remain intact or explicitly unresolved. A metadata rename preserves work links.
+Manual curation remains usable without running research again.
 
-Give every film or television work a stable home that readers can open and curators can maintain.
+## Subsequent delivery order
 
-- Build: Define work records and metadata, catalogue listing and detail queries, work pages, and
-  curator create and edit forms. Seed development works through the same write behavior used by the
-  application.
-- Complete when: A curator creates a work and corrects its metadata. A reader finds it in the
-  catalogue and opens its page. Renaming it preserves existing links.
+Each deliverable includes the operations needed to maintain and consume its output. Application
+features include their UI as well as any backend extensions. The prerequisites below identify actual
+capabilities, not a requirement to finish every earlier numbered item.
 
-### F03 Sources, claims, and evidence
+### 4. Semantic search
 
-Make statements about a work inspectable: what is claimed, whether it is interpretation, and what
-supports or challenges it.
+Requires: Queryable content and visibility rules from research or native publishing.
 
-- Build: Define sources, source locations, claims, evidence relationships, permitted-use metadata,
-  and revisions. Add curator entry forms and reader evidence views. Retain original observations
-  when they enter the system.
-- Complete when: A reader opens a claim and follows its supporting or opposing evidence to a source
-  location. Earlier claim wording remains recoverable. Missing support is visible, and source text
-  is displayed only as permitted.
+Deliver semantic query handling, indexing and updates, and inspectable results across external and
+native content. Complete when agreed example queries return relevant material with evidence and
+context, and edits, withdrawals, and moderation are reflected in results. Search is usable through
+the backend before the application exists.
 
-### F02 Genomes, concepts, and traversal
+### 5. Related-work recommendations
 
-Explain what a work contains and how it connects to other works through shared ideas and techniques.
+Requires: Stored genome properties, concepts, and relationships from research.
 
-- Build: Define concepts, typed genome properties, work memberships, and typed concept
-  relationships. Build genome editing and display, concept pages, evidence links, and related-work
-  navigation. This includes the former F13 concept pages and F27 traversal.
-- Complete when: A reader follows a genome entry from a work to a concept, inspects the evidence,
-  and reaches another work through an explained connection. A curator can maintain those entries and
-  relationships.
+Deliver recommendation generation, querying, explanations, and refresh after knowledge changes.
+Complete when a developer requests related works, inspects the attributes and evidence behind a
+suggestion, and sees corrections reflected in its explanation. Semantic search and personal
+preferences are not dependencies.
 
-### Development approach
+### 6. Research and publishing application
 
-Design these records and relationships together, then implement them through their owning features.
-Use consistent IDs, object types, links, and revision behavior. A source supports a claim; a claim
-can support a genome entry; that entry links a work to a concept. The UI should make that chain
-inspectable. A concept page reads the same records as a work page.
+Requires: The research, native publishing, and maintenance backends. Search and recommendation UI
+also require their corresponding backend capabilities.
 
-Keep source references and semantic relationships distinct: evidence explains why a statement is
-supported, while a relationship explains how objects are connected. A shared identity convention
-does not require storing every kind of object in one generic table.
+Deliver catalogue, work, genome, concept, evidence, review, analysis, and discussion views. Include
+research initiation and status, native authoring and withdrawal, account and moderation controls,
+and authorized catalogue/knowledge maintenance. Integrate search and recommendation experiences.
+Complete when people can research works, inspect cross-work connections, publish and discuss native
+content, and correct knowledge through the application on desktop and mobile. The application uses
+the existing backend operations rather than introducing a second write path or data model.
 
-**Working result:** A reader opens a work, inspects its genome and evidence, follows a concept, and
-finds another related work. A curator can maintain that entire experience inside the application.
+### 7. Precise annotations
 
-## 3. Content ingestion and publishing
+Requires: Addressable content, native contribution behavior, and the application.
 
-Populate the knowledge model without requiring every claim and connection to be entered by hand.
-Manual curation remains available for corrections and original editorial work.
+Deliver passage and data-object selection, annotation authoring, editing, withdrawal, discussion,
+and target resolution. Reuse identity, revisions, ownership, moderation, and published-contribution
+analysis. Complete when a reader annotates a passage or concept entry and another follows the
+annotation to its target. Supported edits preserve the target; missing or ambiguous targets are
+explicitly unresolved. This feature extends native publishing rather than introducing it.
 
-### F11 Source import
+### 8. Rich citations
 
-Bring permitted external material into the application so it can be processed without manual
-copying.
+Requires: Addressable knowledge, native contributions, and the application. Annotation citations
+require annotations; other citations do not.
 
-- Build: Implement source submission, one concrete source adapter, retrieval or upload, import job
-  status, retry handling, and source-specific retention. Store imported material separately from
-  published graph content. Import prepares material; F12 interprets and publishes it.
-- Complete when: A curator submits a source, sees whether retrieval succeeded, and can inspect or
-  retry a failed import. Repeating an import does not create duplicate source records. Disallowed
-  collection is blocked.
+Deliver selection, authoring, editing, resolution, and navigation of references to works, concepts,
+claims, sources, and contributions. Complete when a review or annotation cites evidence and another
+contribution; renames preserve the reference and inaccessible targets are explicitly unavailable.
 
-### F12 Extraction and publication
+### 9. Discussion across contexts
 
-Turn imported material into useful work-page content with evidence that readers can verify.
+Requires: Contributions, work/concept relationships, visibility rules, and the application.
+Citation-based placements additionally require rich citations.
 
-- Build: Extract observations and claims, resolve works and concepts, attach supporting source
-  locations and extraction details, and publish through the existing content write operations.
-  Provide output inspection and correction. The spec defines publication behavior for uncertain or
-  unsupported results.
-- Complete when: A source produces claims attached to the correct work with inspectable evidence.
-  Reprocessing does not duplicate publication. Conflicting interpretations remain distinct, and
-  failed or unsupported extraction is visible.
+Deliver explicit placement rules and bounded related-context views that explain why a contribution
+appears and link to its origin. Complete when the same contribution is discoverable through related
+works or concepts, edits update every placement, and moderation prevents exposure everywhere.
 
-### Development approach
+### 10. Debates and interpretation history
 
-Follow one import end to end: source input, extraction, entity resolution, evidence-backed records,
-and visible work and concept content. Make repeated imports and retries safe from duplicate
-publication. Use the knowledge model's write operations for both ingestion and manual curation. The
-ingestion plan chooses job execution and recovery behavior for this concrete workflow.
+Requires: Claims, evidence, retained revisions, authorized maintenance, and the application.
 
-Ingestion must retain disagreement between sources. Importing another interpretation adds evidence
-or a competing claim; it must not silently replace an existing interpretation. Record the source
-location and extraction version with each derived observation.
+Deliver debate/question authoring and correction, competing-position comparison, and reader access
+to correction history. Complete when a reader compares arguments and counterevidence, follows a
+correction to its reason, and inspects earlier wording subject to visibility rules. Revision capture
+belongs to the original record's owner and never waits for this feature.
 
-**Working result:** A curator submits a permitted source, follows its processing status, inspects
-the resulting claims, and sees published content on the relevant pages with traceable evidence.
+### 11. Scenes and time targets
 
-## 4. Annotation and connected discussion
+Requires: Works, the application, annotations, and citations.
 
-Let people contribute directly to what they are reading and carry that discussion across related
-works and concepts.
+Deliver creation and maintenance of scene/time records and permitted media references, scene views,
+and annotation and citation of moments. Complete when a curator adds a scene and a reader discusses
+or cites a range that another reader can reopen after supported edits, or sees an unresolved state.
+Hosted full-length video and automated full-video analysis are not required.
 
-### F06 Text and concept annotations
+### 12. Semantic timelines
 
-Let someone comment on an exact passage or concept rather than only on an entire work.
+Requires: Scene/time records and their application views.
 
-- Build: Implement text selection and concept targeting, the annotation composer, publish and edit
-  operations, direct links, and target rendering. Store one primary target, quoted text and position
-  where applicable, and original contribution context.
-- Complete when: A reader selects a phrase, publishes an annotation, and reopens it at that phrase.
-  Supported edits retain or reattach the target. If the phrase disappears, the annotation shows an
-  unresolved target instead of moving silently.
+Deliver timeline queries and browsing of scenes, techniques, and discussion using those maintained
+records. Complete when a reader finds a moment on the timeline and opens its scene or discussion;
+changes update the timeline and missing coverage is visible.
 
-### F07 Object citations
+### 13. Personalized discovery
 
-Let contributors support an argument by referencing another item in Marginalia.
+Requires: Accounts, related-work recommendations, and the application.
 
-- Build: Add citation selection to composition and editing, persistent object references with
-  context, and citation rendering and navigation. Support works, concepts, claims, sources, and
-  annotations using their existing identities.
-- Complete when: An annotation cites a claim and another annotation. Readers can open both targets
-  after a label or layout change. A removed or inaccessible target produces an explicit unavailable
-  reference.
+Deliver private preference creation, editing, removal, and retrieval together with recommendations
+that consume desired and unwanted qualities. Complete when different preferences can change results,
+people can inspect and adjust the responsible preference, and another account cannot access it. The
+feature spec decides whether inferred behavior is included.
 
-### F08 Replies and discussion navigation
+### 14. Automated concept proposals and review
 
-Let people respond to contributions and follow a conversation without losing its original subject.
+Requires: Preserved observations and validated, reversible knowledge-maintenance operations.
 
-- Build: Implement reply composition and editing, parent-child contribution relationships, thread
-  queries, pagination, and navigation to the original annotation target. Preserve reply context and
-  revisions alongside annotations.
-- Complete when: A person replies to an annotation, another reader follows the reply to its parent
-  and original target, and more discussion loads on demand without fetching the entire thread.
+Deliver candidate generation across accumulated observations, evidence inspection, and acceptance,
+revision, or rejection through authorized review. Include concepts, aliases, memberships, and typed
+relations with examples, counterexamples, and disputed boundaries. Complete when a reviewer traces a
+proposal to observations and makes a recorded, reversible change; rejection leaves canonical
+knowledge unchanged. This adds collection-wide ontology proposals to the source-backed extraction
+already delivered by research and native analysis.
 
-### F04 Evidence-backed debates
+### 15. Contribution activity
 
-Organize competing answers to a contested question so readers can compare their arguments.
+Requires: Contributions and the citation, discovery, or correction events being measured.
 
-- Build: Represent a debate question and its interpretations, connect each position to claims and
-  supporting or opposing evidence, and build the comparison view and curation controls. Reuse
-  evidence records rather than duplicating source material.
-- Complete when: A reader opens a question such as whether Deckard is a replicant, compares distinct
-  positions, and inspects each position's evidence. The page preserves disagreement rather than
-  presenting a fabricated consensus.
+Deliver activity recording, retention, aggregate queries, and contributor views. Complete when a
+contributor inspects activity with its measurement period, without exposing individual readers or
+private preferences. Do not invent activity from before recording began.
 
-### F24 Interpretation and correction history
+### 16. Domain reputation
 
-Show how an argument changed and which evidence or correction caused that change.
+Requires: Inspectable contribution evidence and any measurements consumed by the reputation rules.
 
-- Build: Build revision queries and history views over claim and contribution revisions retained by
-  their owning features. Connect corrections to the statements and evidence they address. This
-  feature presents history; it does not defer recording revisions until this UI exists.
-- Complete when: A reader compares an earlier interpretation with its corrected version and follows
-  the cited reason for the correction. The earlier wording remains available subject to visibility
-  and retention rules.
+Deliver subject-specific assessment, updates, and views of its supporting contributions. Complete
+when readers can inspect why a result was assigned and evaluation distinguishes useful evidence and
+corrections from popularity or coordinated activity. Include voting-abuse controls if voting is
+introduced.
 
-### F09 Related-context discussion
+### 17. Additional media target experiences
 
-Make a useful contribution discoverable wherever its subject is relevant without copying the
-discussion.
+Requires: The displayed medium, annotations, and citations.
 
-- Build: Define the explicit relationships that qualify an annotation for related work and concept
-  views. Add bounded queries and UI placements that show the reason, original target, citations, and
-  a link to the discussion.
-- Complete when: The same annotation appears at its target and on a related concept page. Editing it
-  updates both views of one identity. A reader can return from either view to the original
-  discussion.
+Deliver one complete selection, authoring, editing, resolution, and reading experience per target
+type. Complete when a reader annotates or cites an image region, logical chart datum, or another
+selected target and reopens it after supported edits. Repeat as separate feature specs. Reviews
+already exist through native publishing; votes require their owning feature. Do not build a
+universal selector engine as a separate delivery prerequisite.
 
-### F10 Moderation and spoilers
+## From deliverables to feature plans
 
-Give readers control over spoilers and moderators a usable way to handle abusive contributions.
+Start with "Research a collection of works." Each spec defines inputs, owned reads and writes,
+usable outputs, prerequisites, and completion scenarios. Its plan selects technology and breaks
+implementation into tasks without turning those tasks into roadmap deliverables. The initial backend
+must be operable and inspectable without fixtures standing in for an unfinished write path.
 
-- Build: Implement reporting, a moderation review view, moderator actions, contribution visibility,
-  spoiler marking, and reveal controls. Apply the resulting visibility decisions to direct reads and
-  all projected views.
-- Complete when: A moderator acts on a report and the hidden contribution disappears from ordinary
-  display everywhere. References remain explicitly unavailable. Spoiler content stays concealed
-  until the reader reveals it.
+Verify provenance and disagreements, permissions, partial failures and retries, repeated runs,
+revision attribution, and invalidation after edits or visibility changes in the owning feature. UI
+verification begins with application delivery and includes desktop and mobile. Code changes need
+applicable type, lint, build, and behavioral checks; documentation changes need consistency, link,
+and formatting checks. Report what actually ran.
 
-### F17 Participation safeguards
+## Scope crosswalk and exclusions
 
-Handle abuse that involves accounts, request volume, or source material rather than a single
-contribution.
+Existing IDs remain traceability labels. F36 adds native publishing, which the previous annotation
+and reply features did not cover. Backend capabilities own working read and write operations;
+deliverable 6 adds their graphical experience.
 
-- Build: Add participation limits, impersonation reports, source and copyright complaints, and the
-  appropriate review and action paths. Reuse moderator roles and reporting mechanisms from F10.
-- Complete when: Excess participation requests receive a clear rejection. A moderator can
-  investigate an impersonation report or source complaint and apply an action to the affected
-  account or material.
+| Capability IDs                                                                                        | Owning deliverables                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F00 runtime; F01 catalogue; F02 genomes/concepts; F03 sources/claims; F11 import; F12 extraction      | 1 delivers research and queryable results; 3 delivers manual maintenance; 6 delivers the application interface.                                                                             |
+| F05 accounts/access; F08 replies; F10 moderation/spoilers; F36 native reviews, analysis, and comments | 2 delivers native publishing and automatic analysis; 6 delivers their application interface. Protected research and maintenance operations enforce authorization from their first delivery. |
+| F17 participation safeguards                                                                          | 1 owns source/copyright complaints; 2 owns participation limits and impersonation handling. Later features extend those controls to their own behavior.                                     |
+| F21 aliases/merges; F22 splits/deprecation                                                            | 3                                                                                                                                                                                           |
+| F15 semantic search; F16 related works                                                                | 4 and 5, respectively                                                                                                                                                                       |
+| F06 annotations; F07 citations; F09 related-context discussion                                        | 7, 8, and 9, respectively                                                                                                                                                                   |
+| F04 debates; F24 interpretation history                                                               | 10                                                                                                                                                                                          |
+| F14 scenes/time targets; F30 timelines                                                                | 11 and 12, respectively                                                                                                                                                                     |
+| F28 private preferences; F29 personalization                                                          | 13                                                                                                                                                                                          |
+| F19 candidate concepts/relations; F20 review/promotion                                                | 14                                                                                                                                                                                          |
+| F25 activity; F26 reputation; F23 additional targets                                                  | 15, 16, and 17, respectively                                                                                                                                                                |
 
-### Development approach
+F13 concept pages and F27 traversal remain incorporated into F02. F18 observation preservation
+belongs to external research and native contribution entry, with no separate delivery feature.
 
-Design the complete interaction: select a passage, write an annotation, cite a claim, publish,
-reply, and encounter the same contribution through a concept. An annotation targets content; a reply
-addresses a contribution. Both should remain navigable without loading the entire discussion.
+The full consumer scope remains planned. Corpus sizes are development estimates, not architectural
+thresholds or release gates. A small caller-selected collection is sufficient to demonstrate
+cross-work research; broad corpus growth does not precede the first usable workflow.
 
-Editing or removing a target must preserve its references or expose an unresolved state. A hidden
-contribution must not remain visible through projection, search, or a direct link. Build moderation
-alongside contribution publishing so it uses the same identity and visibility rules.
+Automated full-video analysis and commercial offerings remain outside committed scope:
 
-**Working result:** A person can start an evidence-backed discussion at a precise target, continue
-it from another context, and inspect how an interpretation changed. Moderators can manage it
-everywhere it appears.
+- F31 Semantic API: partner access to structured knowledge and permitted provenance. The internal
+  application API needed for backend delivery is not this commercial offering.
+- F32 Research and trend tools: aggregate cultural patterns with coverage and uncertainty visible.
+- F33 Audience intelligence: aggregate patterns without exposing individual profiles.
+- F34 Partner recommendation infrastructure: recommendation delivery to external products.
+- F35 Ontology licensing: versioned concepts with provenance, permitted uses, and change handling.
 
-## 5. Search and discovery
-
-Use the content and relationships already in the application to help readers find works and ideas.
-
-### F15 Semantic search
-
-Let readers find relevant works, concepts, and claims by describing an idea.
-
-- Build: Implement indexing, query handling, result ranking and presentation, and updates when
-  content changes. Include enough evidence and relationship context to explain relevance. Support
-  curated content independently of ingestion.
-- Complete when: A query such as institutional politics returns relevant content from an agreed
-  example set. A reader understands each result's context, and edited or hidden content is reflected
-  in subsequent results.
-
-### F16 Related-work recommendations
-
-Help readers find another work based on the qualities of the one they are exploring.
-
-- Build: Generate related-work candidates from genome properties and relationships, rank them, and
-  display the attributes responsible for the recommendation. This feature uses work content without
-  requiring personal preferences.
-- Complete when: A work page suggests another work and explains the shared qualities. Changing the
-  underlying genome changes applicable recommendations rather than leaving stale explanations.
-
-### F28 Private discovery preferences
-
-Let a person tell the product which qualities they want more or less of.
-
-- Build: Implement private preference storage, retrieval, editing, removal, and account controls for
-  desired and unwanted concepts or attributes. Decide explicitly in the spec whether inferred
-  behavior is included.
-- Complete when: A person saves and removes a preference such as wanting procedural realism or
-  avoiding lore-heavy exposition. Another account cannot read or change those preferences.
-
-### F29 Personalized recommendations
-
-Use a person's preferences to suggest works and explain why those suggestions fit.
-
-- Build: Combine related-work recommendation behavior with private preferences, apply desired and
-  unwanted qualities, and show explanations with a path to change the relevant inputs.
-- Complete when: Two different preference sets can produce different suggestions from the same
-  catalogue. A person can inspect a recommendation's reason and adjust the preference responsible
-  for it.
-
-### Development approach
-
-Treat indexes and recommendation results as derived from the shared knowledge model. Define how
-content changes, moderation, and concept changes update or invalidate them. Compare relevance using
-concrete queries and example works. Keep private preferences separate from publicly visible content.
-
-**Working result:** A reader searches for an idea, understands why a work matches, follows related
-works, and adjusts recommendations through their own preferences.
-
-## 6. Scenes and richer media interaction
-
-Extend the same exploration and discussion model to moments within a work.
-
-### F14 Scenes and time targets
-
-Let readers open, annotate, and cite a specific moment within a work.
-
-- Build: Define scene records, time ranges, metadata, and permitted media references. Add scene
-  curation and detail views, time selection, and target resolution using the existing annotation and
-  citation behavior.
-- Complete when: A reader cites a scene or time range and another reader opens the intended moment.
-  A metadata edit preserves the target or exposes an unresolved state. Hosted full-length video is
-  not required.
-
-### F30 Semantic timelines
-
-Help readers see where scenes, techniques, and discussion occur throughout a work.
-
-- Build: Build timeline queries and a timeline view over scene and time records, associated concepts
-  or techniques, and contributions. Connect timeline entries to their existing scene and discussion
-  views.
-- Complete when: A reader locates a technique or active discussion on the timeline and jumps to its
-  scene context. The UI makes missing scene coverage visible rather than implying a complete
-  analysis.
-
-### F23 Additional target experiences
-
-Extend precise discussion to material that text ranges and timestamps cannot address.
-
-- Build: This is a family of target-specific specs, not one universal selector spec. Each selects a
-  concrete target such as an image region, logical chart datum, or another annotation and defines
-  selection, storage, rendering, resolution, and edit behavior. Reviews and votes require their
-  owning features to exist.
-- Complete when: For each selected target type, a reader can identify a precise part, annotate or
-  cite it, and reopen the same part after supported edits. Chart targets use logical data IDs rather
-  than screen pixels.
-
-### Development approach
-
-Reuse annotation ownership, citation, discussion, and moderation behavior. Add the selector and
-rendering behavior specific to each medium. Use logical data identities for chart targets and
-explicit time ranges for scenes. Curated scene records are sufficient; full-video analysis is not
-part of this work.
-
-**Working result:** A reader moves along a work's timeline, opens a scene or technique, and joins a
-precisely located discussion using the same contribution tools as the rest of the application.
-
-## 7. Concept maintenance and formation
-
-Keep the concept system usable as curation, imported sources, and discussion introduce new language.
-
-### F21 Concept aliases and merges
-
-Help curators reconcile different names for the same idea and duplicate concept records.
-
-- Build: Implement alias editing, merge preview and execution, reference and membership handling,
-  change history, and reversal. Preserve original source and contributor expressions rather than
-  rewriting them to the preferred label.
-- Complete when: A curator merges duplicate concepts. Old links remain usable, memberships are
-  retained, and the recorded change can be inspected and reversed.
-
-### F22 Concept splits and deprecation
-
-Let curators separate meanings that were combined incorrectly or retire a misleading concept.
-
-- Build: Implement split and deprecation operations, membership reassignment, explicit treatment of
-  ambiguous references, visible retired-concept states, change history, and reversal.
-- Complete when: A curator splits a concept into distinct meanings and identifies memberships
-  needing review. Existing references retain context. Retiring or reversing a concept change does
-  not silently discard its observations.
-
-### F19 Candidate concepts and relations
-
-Find potential concepts and relationships in language already used by sources and contributors.
-
-- Build: Process preserved observations into clusters and proposed concepts, aliases, memberships,
-  or typed relations. Store candidate evidence and build inspection views with examples,
-  counterexamples, and disputed boundaries.
-- Complete when: A reviewer can trace a proposal to the original observations and inspect why it was
-  suggested. Candidate generation alone makes no canonical concept changes.
-
-### F20 Candidate review and promotion
-
-Turn useful proposals into deliberate, accountable concept changes.
-
-- Build: Implement review decisions, proposal revision, and application of accepted changes through
-  validated concept operations. Record the reviewer, evidence, resulting change, and reversal path.
-  Support human resolution of contested meanings.
-- Complete when: A reviewer accepts, revises, or rejects a proposal. Acceptance makes a traceable,
-  reversible change with compatible references; rejection leaves canonical concepts unchanged.
-
-### Development approach
-
-Concept editing works directly on curated concepts. Candidate generation is another producer of
-proposed changes, not a prerequisite for maintaining the ontology. Accepted proposals use the same
-validated change operations. Preserve original observations so a merge or split can reinterpret
-membership without rewriting what people or sources said.
-
-**Working result:** A curator can correct the ontology, inspect and reverse the change, and review
-an evidence-backed proposal without breaking existing work pages, citations, or discussions.
-
-## 8. Contribution value and reputation
-
-Help contributors understand how their work is used and help readers assess expertise.
-
-### F25 Contribution activity
-
-Show contributors how their work is being discovered, cited, and corrected.
-
-- Build: Record the relevant activity, aggregate it by contribution, and build an activity view.
-  Define measurement start and retention so displayed counts reflect recorded activity without
-  exposing individual readers or private preferences.
-- Complete when: A contributor can inspect citation, discovery, and correction activity across
-  contexts. The view identifies its measurement period and does not invent events from before
-  tracking began.
-
-### F26 Domain-specific reputation
-
-Help readers assess a contributor's expertise in a subject using their actual contribution history.
-
-- Build: Define evidence-backed reputation rules, calculate subject-specific results, and expose the
-  supporting contributions. Evaluate popularity bias and coordinated activity. Include voting-abuse
-  controls if voting is introduced.
-- Complete when: A reader can inspect the evidence behind a reputation result. Evaluation cases
-  distinguish useful cited corrections from raw activity or coordinated promotion.
-
-### Development approach
-
-Use the existing contribution identities, citations, and corrections. Keep activity measurement
-separate from reputation rules so those rules can change without losing their supporting evidence.
-Avoid making contribution value depend on a follower count or unexplained score.
-
-**Working result:** Contributors can inspect how their work is used, and readers can understand the
-evidence behind a claim of subject expertise.
-
-## Turning the roadmap into specs
-
-Start by designing the application foundation and knowledge model together. The first running
-workflow is a persisted work with editable metadata, a sourced claim, and a linked concept. Extend
-that workflow through ingestion and connected discussion, then build discovery from the resulting
-records. Media, concept maintenance, and reputation have their own cohesive workflows and can
-progress when the records they use exist.
-
-Each feature spec defines the user interaction, domain records it owns, server operations, UI views,
-and end-to-end completion scenarios. Its implementation plan selects concrete technology, schemas,
-interfaces, migration behavior, and tests. Record a dependency where it affects the design; do not
-create a separate scheduling exercise for every shared record.
-
-Identity, evidence provenance, source rights, privacy, reference compatibility, and moderation apply
-throughout these workflows. Verify supported edits and failure states as part of the owning feature.
-Check user-facing workflows on desktop and mobile. Broad ingestion retains source-rights and legal
-review requirements. Research and corpus-size estimates inform iteration rather than block delivery.
-
-## Scope references
-
-F13 concept pages and F27 concept traversal are incorporated into F02. F18 observation preservation
-is part of source, annotation, reply, and ingestion records from creation. These IDs do not need
-separate specs. F00 adds application setup work missing from the earlier feature list.
-
-An initial dataset of roughly 10–20 works is a development convenience. The earlier estimates of
-100–500 works and 100–200 concepts describe possible content growth, not architectural thresholds.
-Research can examine precise annotation, discovery across contexts, return visits, interpretation
-quality, and recommendation relevance while development continues.
-
-Commercial opportunities remain outside the consumer specs:
-
-- **F31 Semantic API.** Let external applications query structured works, concepts, claims, and
-  permitted provenance through a defined access contract.
-- **F32 Research and trend tools.** Let researchers examine aggregate cultural patterns over time,
-  with data coverage and uncertainty visible.
-- **F33 Audience intelligence.** Help customers study aggregate audience patterns without exposing
-  individual behavior or personal profiles.
-- **F34 Partner recommendation infrastructure.** Deliver recommendation capabilities to other
-  products with defined inputs, explanations, and evaluated quality.
-- **F35 Ontology licensing.** Distribute a versioned concept dataset with provenance, permitted
-  uses, and a process for consuming changes.
-
-Professional critic and scholar tools, collections and exports, referrals, and sponsorship also
-remain uncommitted. Any commercial offering needs its own demand, rights, and privacy decisions.
+Professional critic and scholar tools, collections and exports, referrals, and sponsorship remain
+uncommitted. Commercial offerings need separate demand, rights, and privacy decisions.

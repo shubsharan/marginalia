@@ -3,16 +3,34 @@
 [Product](product.md) · [Roadmap](roadmap.md)
 
 This document records constraints and possible approaches for the full consumer product. The
-[roadmap](roadmap.md) defines engineering epics, feature boundaries, and the development flow. Stack
-choices remain proposals until adopted in a feature plan; the descriptions here are not
+[roadmap](roadmap.md) defines complete deliverables, their prerequisites, and recommended order.
+Stack choices remain proposals until adopted in a feature plan; the descriptions here are not
 implementation claims.
+
+## Backend and application boundaries
+
+External research and native publishing are two inputs to one persisted, queryable knowledge
+collection. The backend owns their complete write and read workflows before the graphical
+application exists. Start with a caller-selected collection of works, source discovery, extraction,
+and evidence-backed relationships across the collection. Commands or APIs must make the workflow
+operable and its results inspectable. The first research workflow does not expand its own work set.
+
+Native publishing owns original reviews, analysis, comments, and replies. Extraction derives
+knowledge from external material or published native contributions while retaining their distinct
+provenance. Knowledge maintenance owns corrections to those derived records, not edits to an
+author's words. The later application exposes these operations and builds views around the actual
+data; it does not introduce another data model or write path. These are ownership boundaries, not a
+requirement for separate services or packages.
 
 ## Shared foundations
 
 Use a small set of shared concepts so work pages, discussions, and citations do not need separate
 identity rules:
 
-- **Object:** A work, concept, claim, annotation, source, or other addressable item.
+- **Object:** A work, concept, claim, source, contribution, or other addressable item.
+- **Contribution:** Native authored content such as a review, analysis, comment, reply, or
+  annotation. Its authorship, revisions, and visibility remain distinct from knowledge derived
+  through analysis.
 - **Selector:** A precise part of an object, such as a text range or concept property.
 - **Annotation:** A contribution with one primary target, which may be an object or selector.
 - **Reference:** A citation from one object to another.
@@ -41,11 +59,12 @@ outbound link do not grant reuse rights. When external text is processed, keep i
 user-facing graph and apply source-specific retention rules. Source-derived claims should retain the
 supporting location, extraction provenance, and model version where applicable.
 
-The first release needs a way to handle spam, harassment, spoilers, and abusive annotations. Broader
-participation and automated graph changes will also need rate limits, voting abuse controls, source
-and copyright complaints, impersonation controls, and review of ontology changes. The interface
-should show a bounded set of contributions first and load deeper discussion on demand; a general
-target model does not require an infinitely nested interface.
+Native publishing needs usable controls for spam, harassment, spoilers, and abusive contributions
+from its first delivery, including backend enforcement before the application UI exists. It owns
+participation limits and impersonation handling; external research owns source and copyright
+complaints. Add voting-abuse controls with voting and ontology review with automated change
+proposals. The interface should show a bounded set of contributions first and load deeper discussion
+on demand; a general target model does not require an infinitely nested interface.
 
 ## Data and stack choices
 
@@ -61,28 +80,69 @@ or Next.js, Hono, Node or Bun, pgvector, and S3 or R2 are examples to evaluate w
 dedicated graph database is not assumed. Use bounded page queries rather than hydrating the whole
 graph.
 
-## Source ingestion
+## External research
 
-Automated ingestion turns permitted source material into observations and claims, identifies works
-and concepts, connects related arguments, and retains provenance and outbound links. The graph's
-durable value is the derived structure and the conversation around it, not a mirror of third-party
-prose. Candidate sources include open datasets, licensed metadata, criticism, interviews, academic
-work, blogs, and permitted APIs. Rights, retention, and quotation policy must be checked for each
-source before scaling this pipeline.
+Research resolves a caller-selected set of titles, discovers relevant sources, retrieves permitted
+material, and turns it into observations and claims. It identifies concepts and connects works and
+arguments while retaining provenance and outbound links. Ambiguous work matches require explicit
+resolution, and partial source or extraction failures remain inspectable and retryable. Repeated
+runs reuse identities and accumulate results without duplicate publication. The graph's durable
+value is the derived structure and the conversation around it, not a mirror of third-party prose.
+Candidate sources include open datasets, licensed metadata, criticism, interviews, academic work,
+blogs, and permitted APIs. Rights, retention, and quotation policy must be checked for each source
+before scaling this pipeline.
 
-Manual curation and ingestion use the same source and claim records. Source references support
-genomes before contributor-authored citations exist. Ingestion does not require a debate interface.
+External extraction, native analysis, and manual curation use the same knowledge write operations
+and queryable records. Source references support genomes before rich contributor-authored citations
+exist. Research does not require a debate interface or manually authored work pages.
 
 Independent source statements may support one claim, but keep each statement's provenance. Preserve
 disagreement and counterevidence rather than silently producing one canonical interpretation. A
 source-aware pipeline must fail visibly when a claim lacks supporting material.
 
+## Native publication and derived knowledge
+
+Publishing owns creation, editing, publication, reading, and withdrawal of reviews and analysis,
+comments on works or contributions, and replies. It includes account access, ownership checks,
+revision history, publication state, conversation retrieval, reporting, moderation, and spoiler
+controls. Comments and replies also support author editing and withdrawal. Precise annotations later
+reuse this contribution behavior and add target selection.
+
+Automatically analyze published reviews, analysis, comments, and replies. Keep publication state
+separate from analysis status: extraction failure must not turn a successful publication into a
+failed or unreadable contribution. Expose analysis failures and retries without requiring another
+publication. Unpublished content must not become publicly queryable extracted knowledge.
+
+Derived observations, claims, concepts, and relationships retain contribution identity, author,
+revision, supporting location, and extraction provenance. Authored content is authoritative for what
+its author said; extracted interpretations remain separate. Editing a concept or relationship must
+not rewrite the contribution. Native analysis reuses extraction behavior without pretending a native
+contribution is an external import.
+
+A published edit triggers reanalysis and invalidates superseded results. Retrying the same analysis
+must not duplicate derivations. An analysis of an older revision must not restore stale results
+after an edit, withdrawal, or moderation action. Current visibility applies to direct content reads,
+evidence queries, and derived results even while analysis or index updates are pending.
+
+Withdrawal or moderation removes inaccessible material from ordinary reads and prevents it from
+being exposed through evidence, snippets, search, recommendations, or related-context views. Keep
+independently supported knowledge with its remaining attribution; do not erase other sources or
+retain a hidden contribution as publicly inspectable support. Historical revisions remain subject to
+the same retention and visibility rules. The feature plan chooses execution and invalidation
+mechanisms that enforce these behaviors.
+
 ## Concept formation and maintenance
 
-Retain the observation layer: what people, critics, and sources actually said. Candidate formation
+Retain the observation layer: what people, critics, and sources actually said. Research and native
+analysis already extract source-backed concepts, memberships, and relationships. They must preserve
+uncertainty rather than silently merge canonical meanings. Later collection-wide candidate formation
 follows observation, cluster, candidate concept, and reviewed promotion. Curated concepts can
 independently receive aliases, merges, splits, and deprecation changes. Historical observations stay
 available for later reinterpretation.
+
+Maintenance exposes inspection, manual creation and correction, reference handling, change history,
+and reversal through the backend. Later research or analysis must respect recorded corrections
+rather than silently overwrite them. Its graphical controls are part of the application delivery.
 
 Possible promotion evidence includes use across distinct works and contributors, persistence,
 semantic cohesion, low redundancy, and improvement to explanation or discovery. Concept membership
@@ -109,11 +169,12 @@ reverse them. Versioned ontology changes must preserve existing references.
 
 ## Discovery and derived systems
 
-Concept pages and typed traversal operate on curated records. Projection adds discussion to those
-same pages without copying contributions or requiring replies. Semantic search indexes curated
-content as well as ingested content. Attribute recommendations consume genomes; personalized
-recommendations add private preferences without depending on a concept-path browsing interface.
-Timelines consume scene and time targets without requiring cross-context projection.
+Concept pages and typed traversal read the shared research, native-derived, and curated records.
+Projection adds discussion to those same pages without copying contributions. Semantic search
+indexes external and native content as well as curated knowledge, with consistent visibility.
+Attribute recommendations consume genomes; personalized recommendations add private preferences
+without depending on a concept-path browsing interface. Timelines consume scene and time targets
+without requiring cross-context projection.
 
 As search, recommendations, reputation, and concept maintenance are built, changes to annotations,
 citations, claims, sources, votes, and concepts may trigger background updates to indexes, counts,
