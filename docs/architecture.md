@@ -2,10 +2,12 @@
 
 [Product](product.md) · [Roadmap](roadmap.md)
 
-This document records constraints and possible approaches. The [roadmap](roadmap.md) determines when
-later systems are needed.
+This document records constraints and possible approaches for the full consumer product. The
+[roadmap](roadmap.md) defines engineering epics, feature boundaries, and the development flow. Stack
+choices remain proposals until adopted in a feature plan; the descriptions here are not
+implementation claims.
 
-## Prototype foundations
+## Shared foundations
 
 Use a small set of shared concepts so work pages, discussions, and citations do not need separate
 identity rules:
@@ -22,12 +24,12 @@ of each annotation and the references it makes. Build related views from those r
 duplicate contributions when projecting them to concept or work pages. A manually seeded claim needs
 a source reference and a visible distinction between fact and interpretation.
 
-The prototype only needs text and concept targets. A text selector should retain its position and
-quoted context so an annotation can be reattached after an edit or flagged when its target can no
-longer be found. A concept target needs a stable concept or property ID, not a screen position.
-References should resolve independently of the current page layout.
+A text selector should retain its position and quoted context so an annotation can be reattached
+after an edit or flagged when its target can no longer be found. A concept target needs a stable
+concept or property ID, not a screen position. References should resolve independently of the
+current page layout.
 
-Later selectors may address video time ranges, image regions, chart series and datum IDs, genome
+Additional selectors address video time ranges, image regions, chart series and datum IDs, genome
 relations, and annotations themselves. Chart targets should use logical data IDs rather than pixels.
 Add each selector only when its corresponding user experience is built.
 
@@ -35,9 +37,9 @@ Add each selector only when its corresponding user experience is built.
 
 Keep source identity, location, and permitted use with manually curated evidence. The system should
 distinguish indexing and derived analysis from quotation and republication. Attribution and an
-outbound link do not grant reuse rights. If external text is processed later, keep it separate from
-the user-facing graph and apply source-specific retention rules. Source-derived claims should retain
-the supporting location, extraction provenance, and model version where applicable.
+outbound link do not grant reuse rights. When external text is processed, keep it separate from the
+user-facing graph and apply source-specific retention rules. Source-derived claims should retain the
+supporting location, extraction provenance, and model version where applicable.
 
 The first release needs a way to handle spam, harassment, spoilers, and abusive annotations. Broader
 participation and automated graph changes will also need rate limits, voting abuse controls, source
@@ -49,33 +51,38 @@ target model does not require an infinitely nested interface.
 
 A relational store can represent objects, annotations, references, and typed relations. Postgres is
 a candidate, not a decision. Keep structured fields queryable rather than placing the whole graph in
-opaque JSON. The prototype's actual schema should follow the small set of behaviors above; it does
-not need tables for votes, reputation, ontology history, or automated jobs in advance.
+opaque JSON. Schemas follow the features being implemented. Preserve source observations, original
+contribution expressions, and claim revisions from entry so history and concept maintenance do not
+require reconstructing lost evidence. Add other entities when their owning behavior is built.
 
-A later application could use a web client and API, Postgres full-text search or vector retrieval,
+The application could use a web client and API, Postgres full-text search or vector retrieval,
 object storage for permitted artifacts, and background jobs for ingestion and derived views. React
 or Next.js, Hono, Node or Bun, pgvector, and S3 or R2 are examples to evaluate when needed. A
 dedicated graph database is not assumed. Use bounded page queries rather than hydrating the whole
 graph.
 
-## Later source ingestion
+## Source ingestion
 
-Automated ingestion could turn permitted source material into observations and claims, identify
-works and concepts, connect related arguments, and retain provenance and outbound links. The graph's
+Automated ingestion turns permitted source material into observations and claims, identifies works
+and concepts, connects related arguments, and retains provenance and outbound links. The graph's
 durable value is the derived structure and the conversation around it, not a mirror of third-party
 prose. Candidate sources include open datasets, licensed metadata, criticism, interviews, academic
 work, blogs, and permitted APIs. Rights, retention, and quotation policy must be checked for each
 source before scaling this pipeline.
 
+Manual curation and ingestion use the same source and claim records. Source references support
+genomes before contributor-authored citations exist. Ingestion does not require a debate interface.
+
 Independent source statements may support one claim, but keep each statement's provenance. Preserve
 disagreement and counterevidence rather than silently producing one canonical interpretation. A
 source-aware pipeline must fail visibly when a claim lacks supporting material.
 
-## Later concept formation
+## Concept formation and maintenance
 
-Retain the observation layer: what people, critics, and sources actually said. The proposed
-lifecycle is observation, cluster, candidate concept, canonical concept, then possible merge, split,
-or deprecation. Historical observations stay available for later reinterpretation.
+Retain the observation layer: what people, critics, and sources actually said. Candidate formation
+follows observation, cluster, candidate concept, and reviewed promotion. Curated concepts can
+independently receive aliases, merges, splits, and deprecation changes. Historical observations stay
+available for later reinterpretation.
 
 Possible promotion evidence includes use across distinct works and contributors, persistence,
 semantic cohesion, low redundancy, and improvement to explanation or discovery. Concept membership
@@ -88,7 +95,7 @@ identity instability. Candidate relations may come from source language, co-occu
 conditional probabilities, temporal order, graph context, or human correction. Co-occurrence alone
 does not prove hierarchy.
 
-The ontology will need merge, split, alias, and deprecation paths. Redundant concepts can merge;
+The ontology supports merge, split, alias, and deprecation paths. Redundant concepts can merge;
 stable subclusters may split; equivalent phrases can become aliases; unused or misleading terms can
 be deprecated. Prefer concepts that improve retrieval, recommendation, or explanation enough to
 justify their complexity. This is the practical value behind information-gain and
@@ -100,12 +107,20 @@ governance should settle culturally meaningful distinctions, sensitive disputes,
 changes. Models propose patches; canonical changes require validation, an audit trail, and a way to
 reverse them. Versioned ontology changes must preserve existing references.
 
-## Later derived systems
+## Discovery and derived systems
 
-When search, recommendations, reputation, and ontology maintenance exist, changes to annotations,
+Concept pages and typed traversal operate on curated records. Projection adds discussion to those
+same pages without copying contributions or requiring replies. Semantic search indexes curated
+content as well as ingested content. Attribute recommendations consume genomes; personalized
+recommendations add private preferences without depending on a concept-path browsing interface.
+Timelines consume scene and time targets without requiring cross-context projection.
+
+As search, recommendations, reputation, and concept maintenance are built, changes to annotations,
 citations, claims, sources, votes, and concepts may trigger background updates to indexes, counts,
 summaries, ranking, and candidate queues. Choose event and job machinery when these derived views
-become necessary; ordinary prototype reads need no event catalogue.
+become necessary. Ordinary page reads need no event catalogue. Analytics records activity from its
+measurement start; it does not require the interpretation-history interface or invent earlier
+activity.
 
 Ranking should not let popularity overwhelm evidence or subject expertise. Source quality, citation
 use, contextual reputation, and diversity may help, but require evaluation against actual use.
@@ -115,10 +130,10 @@ use, contextual reputation, and diversity may help, but require evaluation again
 - **Unstable targets:** Edits can detach annotations. Retain stable IDs and text context, and
   surface unresolved targets rather than silently moving them.
 - **Ontology entropy:** Unchecked concepts can proliferate. Use aliases, promotion evidence,
-  reversible merges, and human review when the ontology phase begins.
+  reversible changes, and human review for canonical concept changes.
 - **Source rights:** Processing permission differs from quotation or republication permission.
   Preserve rights metadata and seek legal review before broad ingestion.
 - **Recursive discussion:** Summarize and load depth on demand while retaining precise targets and
   citations.
-- **Graph abuse and ranking:** Moderate content and later graph changes; evaluate reputation and
-  ranking so coordinated activity or popularity does not stand in for evidence.
+- **Graph abuse and ranking:** Moderate content and graph changes; evaluate reputation and ranking
+  so coordinated activity or popularity does not stand in for evidence.

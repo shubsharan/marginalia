@@ -1,18 +1,16 @@
 <!--
 Sync Impact Report
-Version change: none -> 1.0.0 (initial adoption)
-Modified principles: none; no prior project constitution exists.
-Added principles:
-- I. Stable targets and one contribution identity
-- II. Evidence with room for disagreement
-- III. Source rights and individual privacy
-- IV. Navigable discussion with abuse controls
-- V. Build for the current phase
-Added sections: Core Principles; Product and architecture constraints;
-Development workflow and verification; Governance.
-Removed sections: none.
+Version change: 2.0.0 -> 2.0.1
+Rationale: organize the roadmap around engineering workflows and spec boundaries instead of a
+numbered build queue. This clarifies presentation without changing committed consumer scope.
+Modified principle: V, replace queue terminology with development-flow terminology.
+Modified section: Product and architecture constraints, clarify roadmap ownership.
+Aligned documents: docs/product.md, docs/architecture.md, docs/roadmap.md.
+Compatibility impact: existing feature IDs remain traceable; related features may share a spec.
+No application or data migration is required. Templates continue to read this file at runtime.
+The approved 2.0.0 scope expansion remains in force; business-phase gates remain removed.
+Preserved: stable identity, evidence, rights, privacy, moderation, reversible concept changes.
 Deferred items and follow-up TODOs: none.
-Dependent templates and commands read this constitution at runtime; no changes required here.
 -->
 
 # Marginalia Constitution
@@ -40,8 +38,10 @@ interface MUST distinguish factual observations from interpretations. Competing 
 MUST retain their arguments, evidence, and counterevidence rather than become a single supposed
 consensus. Source counts and provenance labels MUST reflect actual supporting records.
 
-When automated ingestion or concept formation is introduced, it MUST preserve original
-observations, source provenance, and extraction and model details where applicable. Missing
+Source and contribution entry MUST preserve original observations, provenance, and revision context
+under the applicable retention policy. Claims MUST retain revisions from creation. Ingestion MUST
+retain extraction and model details where applicable. History and concept maintenance MUST consume
+these records rather than attempt to reconstruct evidence that was discarded. Missing
 support MUST produce a visible failure or an explicitly unsupported state. Models MAY propose
 concept changes; canonical changes MUST require validation, an audit trail, and reversibility.
 Humans or community governance MUST settle contested meanings and high-impact ontology changes.
@@ -76,38 +76,43 @@ rate limits, voting-abuse controls, source and copyright complaint handling, imp
 controls, and ontology review. When ranking or reputation is introduced, its evaluation MUST check
 that popularity and coordinated activity do not substitute for evidence or subject expertise.
 
-### V. Build for the current phase
+### V. Build by user outcome and behavioral dependency
 
-Every feature MUST state the user outcome and roadmap phase it serves. The current prototype
-MUST focus on manually curated works and concepts, work-level genomes, an evidence-backed debate,
-text and concept annotations, citations, and discovery of one contribution in related contexts.
-Curated navigation is sufficient for this phase.
+Every feature MUST identify its user outcome, roadmap feature ID, and hard behavioral prerequisites.
+The full consumer product is in scope, including ingestion, discussion, discovery, media targets,
+and concept maintenance. Manual curation MUST remain supported alongside ingestion.
 
-Automated ingestion, ontology maintenance, semantic search, recommendations, richer media
-selectors, and full video analysis MUST wait for their corresponding user experience and an
-explicit scope decision. New infrastructure, abstractions, and schema entities MUST have a
-current behavioral requirement; hypothetical future use alone is insufficient. Corpus targets
-and success signals MUST remain labeled as planning estimates or hypotheses until verified.
+Implementation MUST satisfy the prerequisites required by the behavior being delivered. Independent
+features MAY proceed without completing an entire epic or validating a business hypothesis. Specs
+MAY be drafted together when they share behavior. Feature IDs identify capabilities; the roadmap describes the development flow and
+cohesive spec boundaries. Integration and release checks MUST remain distinct from build dependencies.
+
+New infrastructure, abstractions, and schema entities MUST serve an identified feature requirement.
+Business research informs iteration without blocking unrelated work. Corpus sizes MUST remain
+seed-data estimates, and research signals MUST remain hypotheses until verified. Automated
+full-video analysis and commercial offerings remain outside committed consumer scope and require
+an explicit scope decision before implementation.
 
 ## Product and architecture constraints
 
 - `docs/product.md` defines the product experience. Annotation, citation, evidence, and discovery
   across related contexts MUST remain central to feature decisions.
-- `docs/roadmap.md` owns delivery order. Moving later capabilities into the current phase MUST
-  include an explicit roadmap decision and rationale rather than an incidental implementation.
+- `docs/roadmap.md` owns feature scope, engineering epics, and the development flow. Scope and dependency
+  changes MUST identify the affected feature and rationale. Business-phase validation MUST NOT
+  become a prerequisite for independent consumer features.
 - `docs/architecture.md` records constraints and proposals. Candidate databases, frameworks,
   storage services, and job systems MUST NOT be treated as adopted choices without a documented
   decision tied to current needs. The starter README does not establish product architecture.
 - Structured fields needed for queries MUST remain queryable rather than placing the entire graph
   in opaque JSON. A dedicated graph database is not required. Concept relationships MUST support
   overlapping, typed connections rather than enforce a single taxonomy tree.
-- Selectors MUST be added with their associated user experience. Future image, chart, or video
-  targets do not justify implementing those selectors during the text-and-concept prototype.
+- Selectors MUST be added with their associated user experience and define supported edit and
+  unresolved-target behavior. A general target model alone does not justify an unused selector.
 
 ## Development workflow and verification
 
-Specifications and plans MUST identify the user journey, roadmap scope, applicable principles,
-acceptance criteria, and any proposed exception before implementation. Reviews MUST check those
+Specifications and plans MUST identify the user journey, roadmap feature and epic, hard behavioral
+prerequisites, applicable principles, acceptance criteria, and any proposed exception before implementation. Reviews MUST check those
 commitments against the resulting behavior. Keep changes within the requested scope and preserve
 unrelated work.
 
@@ -142,4 +147,4 @@ preserving the original ratification date. Plans and pull-request reviews MUST r
 or explicitly identify an approved exception. Dependent Spec Kit templates read this constitution
 at runtime and MUST NOT be edited merely to duplicate its rules.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
+**Version**: 2.0.1 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-03
