@@ -1,17 +1,17 @@
-# Implementation plan: Source search and discovery
+# Implementation plan: Search
 
-**Branch**: `feat-001-source-search-discovery` | **Date**: 2026-10-22 | **Spec**: [spec.md](spec.md)
+**Branch**: `feat-001-search` | **Date**: 2026-10-22 | **Spec**: [spec.md](spec.md)
 
-**Input**: `docs/specs/001-source-search-discovery/spec.md`
+**Input**: `docs/specs/001-search/spec.md`
 
 Status: Phase 0 research and Phase 1 design complete. Runtime implementation has not started. Spec
-Kit reports logical branch `001-source-search-discovery`; the actual Git branch includes `feat-`.
+Kit reports logical branch `001-search`; the actual Git branch includes `feat-`.
 
 ## Summary
 
 Build one local JSON API that resolves film and television titles through TMDB, waits for caller
 confirmation, and queries Exa Search once per distinct selected work. Save source metadata, query,
-rank, discovery time, and work associations in SQLite. Persist operation attempts so failures remain
+rank, search time, and work associations in SQLite. Persist operation attempts so failures remain
 inspectable and retryable without repeating completed work.
 
 Exa Search is the only Exa product adopted here. Omit content retrieval and synthesis options.
@@ -55,7 +55,7 @@ Constitution version 3.0.0. Every gate passed before research and after design.
 | Principle                               | Pre-research requirement                        | Post-design evidence                                                                              |
 | --------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | I. Preserve meaning and context         | Stable identities and original mappings         | Namespaced TMDB IDs/local UUIDs and source URLs, frozen selections, per-attempt observations      |
-| II. Evidence with room for disagreement | Discovery cannot become a claim                 | Unverified candidates, nullable fields, attributed rank and query                                 |
+| II. Evidence with room for disagreement | Search cannot become a claim                    | Unverified candidates, nullable fields, attributed rank and query                                 |
 | III. Respect rights and privacy         | Metadata permission differs from content rights | Reviewed metadata allowlist, no content requests/raw payload storage, unknown source rights       |
 | IV. Safe and accountable participation  | No publishing or public participation here      | Loopback JSON API with host/origin checks; contribution controls stay with their owning feature   |
 | V. Build for an identified user need    | Complete roadmap feature 1 only                 | One application/database supports submit, select, inspect, retry, and restart                     |
@@ -70,13 +70,13 @@ No constitutional exceptions or amendments are needed.
 2. Resolve and save candidate metadata. Require confirmation for singleton and ambiguous results.
    Declining or receiving no eligible candidate leaves that input unresolved.
 3. Apply selections atomically, checking ownership and eligibility. Once every input resolves,
-   freeze the set and queue one discovery operation per distinct work in the same transaction.
+   freeze the set and queue one search operation per distinct work in the same transaction.
 4. Run bounded Exa searches. Atomically save validated identities, observations, associations,
    rejected-result reasons, and successful outcomes. Failures remain visible operations.
 5. Read saved results without provider calls. Retry failed/interrupted operations only. Recover
    expired attempts as interrupted; reject late responses from attempts that no longer own the work.
 
-See the [data model](data-model.md), [API contract](contracts/discovery-api.md), and
+See the [data model](data-model.md), [API contract](contracts/search-api.md), and
 [provider contract](contracts/providers.md) for state and interface rules.
 
 ## Project structure
@@ -84,13 +84,13 @@ See the [data model](data-model.md), [API contract](contracts/discovery-api.md),
 ### Design artifacts
 
 ```text
-docs/specs/001-source-search-discovery/
+docs/specs/001-search/
   spec.md
   checklists/requirements.md
   plan.md
   research.md
   data-model.md
-  contracts/discovery-api.md
+  contracts/search-api.md
   contracts/providers.md
   quickstart.md
   tasks.md
@@ -101,28 +101,28 @@ docs/specs/001-source-search-discovery/
 ### Planned source code
 
 ```text
-apps/discovery/
+apps/search/
   package.json
   tsconfig.json
   .env.example
   metadata-policy.json
-  migrations/001_discovery.sql
+  migrations/001_search.sql
   src/server.ts
   src/config.ts
   src/db.ts
-  src/discovery.ts
+  src/search.ts
   src/worker.ts
   src/providers/tmdb.ts
   src/providers/exa.ts
   tests/fixtures/
-  tests/discovery.test.ts
+  tests/search.test.ts
   tests/providers.test.ts
   tests/recovery.test.ts
   tests/live-acceptance.test.ts
 ```
 
-These paths are proposed. The server owns HTTP validation; discovery owns submit/select/retry/read;
-the worker dispatches persistent operations; the database module owns migrations and transactions.
+These paths are proposed. The server owns HTTP validation; search owns submit/select/retry/read; the
+worker dispatches persistent operations; the database module owns migrations and transactions.
 Provider modules validate external responses. No repository/service class layers are needed.
 
 Implementation must also update workspace development dependencies and the Bun lockfile, replace the

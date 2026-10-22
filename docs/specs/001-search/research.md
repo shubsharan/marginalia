@@ -1,8 +1,8 @@
 # Research decisions
 
-Date: 2026-10-22. Scope: [source search and discovery](spec.md), roadmap feature 1. These are
-implementation decisions, not implemented behavior. The current repository has workspace tooling and
-shared TypeScript configuration but no application runtime.
+Date: 2026-10-22. Scope: [search](spec.md), roadmap feature 1. These are implementation decisions,
+not implemented behavior. The current repository has workspace tooling and shared TypeScript
+configuration but no application runtime.
 
 ## Exa Search discovers source metadata
 
@@ -10,7 +10,7 @@ shared TypeScript configuration but no application runtime.
   `type: "auto"`, and `numResults: 20`. Run one query per distinct selected work. Omit `contents`,
   `outputSchema`, and all synthesis options. Keep the request shape explicit in a contract test.
 - Rationale: Search returns ranked locations and descriptive metadata. Twenty results per work is
-  our bounded discovery budget. Exa has no result pagination, so inspection pagination reads SQLite.
+  our bounded search budget. Exa has no result pagination, so inspection pagination reads SQLite.
   Source overlap across work queries records possible relevance to multiple selected works.
 - Alternatives considered: `exa-js` adds no necessary behavior for this single endpoint. Deep
   search, generated relevance explanations, and pairwise searches add processing or cost without a
@@ -26,14 +26,14 @@ exact-match guarantee.
 
 ## Other Exa products belong to different workflows
 
-| Product                                                | Decision and rationale                                                                                                                                     | Alternative for this feature                   |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| [Contents](https://exa.ai/docs/reference/get-contents) | Defer to feature 2. Fetching text or highlights violates FR-014 here. Later adoption requires checking source permissions and provider retrieval behavior. | Store source locations only.                   |
-| [Agent](https://exa.ai/docs/agent/quickstart)          | Defer. Multi-step research, verification, and enrichment read and synthesize sources.                                                                      | One bounded metadata search per work.          |
-| [Answer](https://exa.ai/docs/reference/answer)         | Exclude. Generated answers are outside discovery.                                                                                                          | Expose original search provenance.             |
-| [Snapshot](https://exa.ai/docs/search/snapshot)        | Defer until historical source content is needed and permitted.                                                                                             | Save immutable discovery observations locally. |
-| [Monitors](https://exa.ai/docs/monitors/quickstart)    | Exclude. Recurring searches and webhook delivery are not requested, and runs synthesize findings.                                                          | Caller-triggered requests and retries.         |
-| Websets and OpenAI-compatible endpoints                | Exclude. There is no existing integration to preserve or collection-enrichment requirement.                                                                | Native Search HTTP contract.                   |
+| Product                                                | Decision and rationale                                                                                                                                     | Alternative for this feature                |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| [Contents](https://exa.ai/docs/reference/get-contents) | Defer to feature 2. Fetching text or highlights violates FR-014 here. Later adoption requires checking source permissions and provider retrieval behavior. | Store source locations only.                |
+| [Agent](https://exa.ai/docs/agent/quickstart)          | Defer. Multi-step research, verification, and enrichment read and synthesize sources.                                                                      | One bounded metadata search per work.       |
+| [Answer](https://exa.ai/docs/reference/answer)         | Exclude. Generated answers are outside search.                                                                                                             | Expose original search provenance.          |
+| [Snapshot](https://exa.ai/docs/search/snapshot)        | Defer until historical source content is needed and permitted.                                                                                             | Save immutable search observations locally. |
+| [Monitors](https://exa.ai/docs/monitors/quickstart)    | Exclude. Recurring searches and webhook delivery are not requested, and runs synthesize findings.                                                          | Caller-triggered requests and retries.      |
+| Websets and OpenAI-compatible endpoints                | Exclude. There is no existing integration to preserve or collection-enrichment requirement.                                                                | Native Search HTTP contract.                |
 
 ## TMDB supplies work identity
 
@@ -45,7 +45,7 @@ exact-match guarantee.
   measured claim that TMDB resolves our corpus more accurately.
 - Alternatives considered: Wikidata offers openly reusable structured metadata, but its general
   entity model adds classification work here. TVmaze does not cover films. Exa remains the source
-  discovery provider, not the work identity authority. External-ID enrichment is deferred.
+  search provider, not the work identity authority. External-ID enrichment is deferred.
 
 Use [movie search](https://developer.themoviedb.org/reference/search-movie) and
 [TV search](https://developer.themoviedb.org/reference/search-tv) with the
@@ -69,10 +69,10 @@ provenance. These licensing conditions do not confer rights over research-source
 
 ## Bun and SQLite provide the local runtime
 
-- Decision: Add one `apps/discovery` workspace using repository-pinned Bun 1.4.2 and TypeScript
-  7.0.2. Use `Bun.serve`, `bun:sqlite`, native `fetch`, and `bun:test`. Reuse shared TypeScript
-  settings and the installed formatter and linter. No HTTP framework, ORM, queue service, or new
-  production package.
+- Decision: Add one `apps/search` workspace using repository-pinned Bun 1.4.2 and TypeScript 7.0.2.
+  Use `Bun.serve`, `bun:sqlite`, native `fetch`, and `bun:test`. Reuse shared TypeScript settings
+  and the installed formatter and linter. No HTTP framework, ORM, queue service, or new production
+  package.
 - Rationale: The trusted local developer needs durable writes and JSON reads. Bun includes the
   required [HTTP server](https://bun.sh/docs/runtime/http/server) and
   [SQLite driver](https://bun.sh/docs/runtime/sqlite). A single application owns the workflow.
@@ -98,7 +98,7 @@ recreate storage on an upgrade error. Keep external calls outside write transact
   failure hides cost and can repeat completed searches. An external workflow engine is unnecessary.
 
 Use a 15-second timeout per external call and a 60-second operation deadline. Resolution makes one
-typed search or two searches when type is omitted. Source discovery makes one Exa call. Use no
+typed search or two searches when type is omitted. Source search makes one Exa call. Use no
 automatic provider retries. Save a retry time from `Retry-After` or a 30-second fallback for rate
 limits and transient service failures. Map Exa's
 [documented errors](https://exa.ai/docs/admin/error-codes) to safe local codes and guidance. Never

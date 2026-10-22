@@ -11,8 +11,8 @@ implementation claims.
 
 External research and native publishing are two inputs to one persisted, queryable knowledge
 collection. The backend owns their complete write and read workflows before the graphical
-application exists. Start with a caller-selected collection of works, source discovery, extraction,
-and evidence-backed relationships across the collection. Commands or APIs must make the workflow
+application exists. Start with a caller-selected collection of works, source search, extraction, and
+evidence-backed relationships across the collection. Commands or APIs must make the workflow
 operable and its results inspectable. The first research workflow does not expand its own work set.
 
 Native publishing owns original reviews, analysis, comments, and replies. Extraction derives

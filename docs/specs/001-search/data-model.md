@@ -1,4 +1,4 @@
-# Discovery data model
+# Search data model
 
 Planned SQLite model for [the specification](spec.md). Local records have UUIDs and UTC timestamps.
 Foreign keys are enabled. Provider observations and selection snapshots retain their original
@@ -8,15 +8,15 @@ values.
 
 | Record                  | Fields and constraints                                                                                                                                                                                                                                                             |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `discovery_requests`    | ID, created time, nullable work-set freeze time, validated versioned limits snapshot.                                                                                                                                                                                              |
+| `search_requests`       | ID, created time, nullable work-set freeze time, validated versioned limits snapshot.                                                                                                                                                                                              |
 | `title_inputs`          | ID, request ID, position, original title, normalized search title, optional year/type, resolution state, nullable selected candidate ID and selection time. Unique request/position.                                                                                               |
 | `resolution_candidates` | ID, input ID, attempt ID, ordinal, provider, provider media type, provider ID, title, original title, application type, release/first-air date, original language, available origin countries, retrieval time, eligibility/reason. Unique attempt/provider/media-type/provider-ID. |
 | `works`                 | Local UUID, provider, provider media type, provider ID, first-selected title/type/details, identity URL, retrieval time, created time. Unique provider/media-type/provider-ID.                                                                                                     |
 | `request_works`         | Request ID, work ID, representative selected candidate ID. Unique request/work. Each input also keeps its own selection snapshot.                                                                                                                                                  |
 | `sources`               | ID, normalized URL, source host, created time. Unique normalized URL. Processing/display permission for source content stays `unknown`.                                                                                                                                            |
-| `discovery_records`     | ID, request ID, work ID, source ID, first-found time. Unique request/work/source. Work must belong to this request.                                                                                                                                                                |
-| `source_observations`   | ID, discovery record ID, attempt ID, provider result ID, ordinal, original permitted URL, nullable title/author/publisher/publication date, observed time, metadata policy revision. Unique attempt/result ordinal.                                                                |
-| `operations`            | ID, request ID, resolution/discovery kind, affected input ID or work ID, state, current attempt ID. Exactly one target according to kind. Unique input for resolution; unique request/work for discovery.                                                                          |
+| `search_records`        | ID, request ID, work ID, source ID, first-found time. Unique request/work/source. Work must belong to this request.                                                                                                                                                                |
+| `source_observations`   | ID, search record ID, attempt ID, provider result ID, ordinal, original permitted URL, nullable title/author/publisher/publication date, observed time, metadata policy revision. Unique attempt/result ordinal.                                                                   |
+| `operations`            | ID, request ID, resolution/search kind, affected input ID or work ID, state, current attempt ID. Exactly one target according to kind. Unique input for resolution; unique request/work for search.                                                                                |
 | `operation_attempts`    | ID, operation ID, attempt number, state, start/deadline/finish times, provider, exact query/context and template version, provider request ID, safe error code, retry time, counts, limit flags, notice codes. Unique operation/attempt number.                                    |
 | `rejected_results`      | ID, attempt ID, ordinal, safe reason code. No raw URL or provider payload.                                                                                                                                                                                                         |
 | `schema_migrations`     | Applied version, checksum, applied time. Migration and version insertion commit together.                                                                                                                                                                                          |
@@ -61,15 +61,15 @@ failures to retry. Clarifying an input requires a new request.
 
 Before freeze, callers can select another saved eligible candidate or reverse a decline. Selections
 validate candidate/input/request ownership. Once all inputs resolve, a single transaction freezes
-memberships and queues one discovery operation per distinct work. Subsequent selection changes
-return `409 work_set_frozen`. Preserve duplicate original inputs with one membership.
+memberships and queues one search operation per distinct work. Subsequent selection changes return
+`409 work_set_frozen`. Preserve duplicate original inputs with one membership.
 
 ## Attempts, recovery, and retry
 
 Operations use `pending`, `running`, `succeeded`, `failed`, and `interrupted`. Claiming pending work
 atomically creates an attempt and installs its ID as current. External calls occur outside write
 transactions. Each attempt expires after 60 seconds; each call times out after 15 seconds including
-response consumption. Resolution makes at most two calls; discovery makes one.
+response consumption. Resolution makes at most two calls; search makes one.
 
 Publishing results or failure checks current attempt ID, running state, and unexpired deadline in
 the same transaction. Late responses cannot change results. A once-per-second sweep and startup
@@ -89,9 +89,9 @@ Apply these rules in order; always include all failures and required actions sep
 1. Pending/running resolution means `resolving`.
 2. Before freeze, failed/interrupted resolution means `blocked`. Otherwise unselected inputs mean
    `needs_input`.
-3. After freeze, pending/running discovery means `discovering`.
-4. All discovery operations succeeded means `completed`, including successful empty searches.
-5. Otherwise use `partial` if any discovery succeeded, or `failed` if none succeeded.
+3. After freeze, pending/running search means `searching`.
+4. All search operations succeeded means `completed`, including successful empty searches.
+5. Otherwise use `partial` if any search succeeded, or `failed` if none succeeded.
 
 Per-work coverage distinguishes pending, running, sources_found, no_sources, failed, and
 interrupted. Expose returned/retained/rejected counts, limit flags, and next actions. Twenty

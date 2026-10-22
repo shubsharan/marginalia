@@ -10,6 +10,10 @@ limit enforced while reading, before JSON parsing. Operations have a 60-second d
 no automatic retries. Save safe local codes and validated provider request IDs, never arbitrary
 exceptions, headers, raw responses, or provider error bodies.
 
+Set `redirect: "error"` on every provider fetch. A redirect fails the operation without contacting
+its destination; never forward credentials or replay the request there. Test this with local
+redirect endpoints and fake credentials, asserting that the destination receives no request.
+
 Honor valid `Retry-After` dates or seconds for rate/transient failures; otherwise set a 30-second
 retry delay. Invalid JSON, oversized bodies, and malformed top-level arrays fail the operation.
 Unusable source locations create rejected-result records. Missing/invalid optional metadata becomes

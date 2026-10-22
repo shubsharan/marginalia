@@ -1,4 +1,4 @@
-# Local discovery API
+# Local search API
 
 Planned JSON API at `http://127.0.0.1:4310`. No routes exist yet. Public hosting and the full
 knowledge-query API are outside this feature.
@@ -9,12 +9,12 @@ Bind only loopback. Validate Host against the configured loopback address/port. 
 Origin headers and cross-site requests; provide no CORS grant. Mutations require `application/json`.
 Return JSON as data, never HTML. This interface trusts the local machine and has no public accounts.
 
-| Configuration            | Behavior                                                                                                           |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `MARGINALIA_DB_PATH`     | Defaults to `apps/discovery/data/discovery.sqlite`, resolved from the app directory regardless of launch directory |
-| `EXA_API_KEY`            | Required for Exa execution only; never serialized/logged                                                           |
-| `TMDB_READ_ACCESS_TOKEN` | TMDB API Read Access Token sent only in the Authorization header; required for live resolution                     |
-| `metadata-policy.json`   | Reviewed provider permission basis and fixed metadata allowlists, per [providers.md](providers.md)                 |
+| Configuration            | Behavior                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `MARGINALIA_DB_PATH`     | Defaults to `apps/search/data/search.sqlite`, resolved from the app directory regardless of launch directory |
+| `EXA_API_KEY`            | Required for Exa execution only; never serialized/logged                                                     |
+| `TMDB_READ_ACCESS_TOKEN` | TMDB API Read Access Token sent only in the Authorization header; required for live resolution               |
+| `metadata-policy.json`   | Reviewed provider permission basis and fixed metadata allowlists, per [providers.md](providers.md)           |
 
 Missing provider configuration fails affected operations visibly while saved reads remain available.
 Storage/migration failure prevents readiness and startup. Health reports storage and provider
@@ -39,27 +39,27 @@ attempts and observations always use pagination.
 
 ## Endpoints
 
-| Method/path                                                         | Request                                                       | Success                                                                     |
-| ------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `GET /health`                                                       | None                                                          | `200` storage readiness and provider configuration flags                    |
-| `POST /v1/discovery-requests`                                       | `{"inputs":[{"title":"Heat","year":1995,"workType":"film"}]}` | `202` requestId, statusUrl, queued count                                    |
-| `GET /v1/discovery-requests`                                        | Pagination                                                    | `200` saved summaries                                                       |
-| `GET /v1/discovery-requests/:id`                                    | None                                                          | `200` ordered inputs, selected IDs, counts, per-work coverage, next actions |
-| `GET /v1/discovery-requests/:id/inputs/:inputId/candidates`         | Pagination                                                    | `200` candidate metadata, eligibility, provenance, limits                   |
-| `POST /v1/discovery-requests/:id/selections`                        | `{"selections":[{"inputId":"...","candidateId":"..."}]}`      | `200` summary; final selection also queues discovery                        |
-| `GET /v1/discovery-requests/:id/works`                              | Pagination                                                    | `200` selected works, input mappings, selection snapshots                   |
-| `GET /v1/discovery-requests/:id/sources`                            | Pagination, optional workId                                   | `200` one row/source with matching work IDs and observation links           |
-| `GET /v1/discovery-requests/:id/operations`                         | Pagination                                                    | `200` operations, latest attempts, safe errors/counts/retry times           |
-| `GET /v1/discovery-requests/:id/operations/:operationId/attempts`   | Pagination                                                    | `200` historical attempts and query provenance                              |
-| `GET /v1/discovery-requests/:id/operations/:operationId/rejections` | Pagination                                                    | `200` rejected ordinals/reasons with attempt IDs                            |
-| `POST /v1/discovery-requests/:id/retry`                             | operationIds array or `{}`                                    | `202` queued IDs, or `200` empty list if none qualify                       |
-| `GET /v1/works/:id`                                                 | None                                                          | `200` stable identity and first-selected metadata provenance                |
-| `GET /v1/sources/:id`                                               | None                                                          | `200` identity/location, unknown content rights, observations URL           |
-| `GET /v1/sources/:id/observations`                                  | Pagination, optional requestId                                | `200` metadata with query/rank/time and request/work associations           |
+| Method/path                                                      | Request                                                       | Success                                                                     |
+| ---------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `GET /health`                                                    | None                                                          | `200` storage readiness and provider configuration flags                    |
+| `POST /v1/search-requests`                                       | `{"inputs":[{"title":"Heat","year":1995,"workType":"film"}]}` | `202` requestId, statusUrl, queued count                                    |
+| `GET /v1/search-requests`                                        | Pagination                                                    | `200` saved summaries                                                       |
+| `GET /v1/search-requests/:id`                                    | None                                                          | `200` ordered inputs, selected IDs, counts, per-work coverage, next actions |
+| `GET /v1/search-requests/:id/inputs/:inputId/candidates`         | Pagination                                                    | `200` candidate metadata, eligibility, provenance, limits                   |
+| `POST /v1/search-requests/:id/selections`                        | `{"selections":[{"inputId":"...","candidateId":"..."}]}`      | `200` summary; final selection also queues search                           |
+| `GET /v1/search-requests/:id/works`                              | Pagination                                                    | `200` selected works, input mappings, selection snapshots                   |
+| `GET /v1/search-requests/:id/sources`                            | Pagination, optional workId                                   | `200` one row/source with matching work IDs and observation links           |
+| `GET /v1/search-requests/:id/operations`                         | Pagination                                                    | `200` operations, latest attempts, safe errors/counts/retry times           |
+| `GET /v1/search-requests/:id/operations/:operationId/attempts`   | Pagination                                                    | `200` historical attempts and query provenance                              |
+| `GET /v1/search-requests/:id/operations/:operationId/rejections` | Pagination                                                    | `200` rejected ordinals/reasons with attempt IDs                            |
+| `POST /v1/search-requests/:id/retry`                             | operationIds array or `{}`                                    | `202` queued IDs, or `200` empty list if none qualify                       |
+| `GET /v1/works/:id`                                              | None                                                          | `200` stable identity and first-selected metadata provenance                |
+| `GET /v1/sources/:id`                                            | None                                                          | `200` identity/location, unknown content rights, observations URL           |
+| `GET /v1/sources/:id/observations`                               | Pagination, optional requestId                                | `200` metadata with query/rank/time and request/work associations           |
 
 Selection batches contain 1-20 unique input IDs; `candidateId: null` means decline. Validate all
 ownership and eligibility before mutation. One invalid choice rejects the whole batch. The final
-selection freezes memberships and queues discovery atomically. Frozen selections cannot change.
+selection freezes memberships and queues search atomically. Frozen selections cannot change.
 
 Retry arrays contain at most 20 unique operation IDs in this request. Explicit succeeded, active, or
 not-yet-due operations produce `409 operation_not_retryable` without changes. `{}` selects only due
@@ -68,7 +68,7 @@ completed work. Configuration must be corrected before an affected retry can suc
 
 ## Response meaning
 
-Request status is `resolving`, `needs_input`, `blocked`, `discovering`, `completed`, `partial`, or
+Request status is `resolving`, `needs_input`, `blocked`, `searching`, `completed`, `partial`, or
 `failed`, per the [model](../data-model.md). Summaries include limits, freeze time, input states,
 distinct-work count, operation counts by state, per-work coverage, `coverageBounded: true`, limit
 flags, and next actions with affected IDs.

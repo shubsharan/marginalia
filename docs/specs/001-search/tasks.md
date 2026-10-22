@@ -1,9 +1,9 @@
-# Tasks: Source search and discovery
+# Tasks: Search
 
-**Input**: Design documents in `docs/specs/001-source-search-discovery/`.
+**Input**: Design documents in `docs/specs/001-search/`.
 
 **Prerequisites**: [plan.md](plan.md), [spec.md](spec.md), [research.md](research.md),
-[data-model.md](data-model.md), [API contract](contracts/discovery-api.md),
+[data-model.md](data-model.md), [API contract](contracts/search-api.md),
 [provider contract](contracts/providers.md), and [quickstart.md](quickstart.md). Follow
 `.specify/memory/constitution.md` version 3.0.0.
 
@@ -15,15 +15,15 @@ implementation and confirm they fail for the intended missing behavior. Use inje
 temporary databases; ordinary tests must never call live providers. Live acceptance is separate.
 
 **Organization**: Each story has one phase. US2 precedes US1 because caller-confirmed identities are
-required before discovery; both have priority P1. The minimum usable discovery increment is US2 plus
-US1, not an automatic-selection shortcut.
+required before search; both have priority P1. The minimum usable search increment is US2 plus US1,
+not an automatic-selection shortcut.
 
 ## Format and path conventions
 
 - Each task has an unchecked box, sequential ID, optional `[P]`, and a story label in story phases.
 - `[P]` identifies tasks that can run together within the dependency group stated below. It does not
   waive earlier phase prerequisites or permit concurrent edits to the same file.
-- Paths are relative to the repository root. Runtime code belongs in `apps/discovery/`.
+- Paths are relative to the repository root. Runtime code belongs in `apps/search/`.
 - Reuse Bun, SQLite, native fetch, existing workspace globs, and shared TypeScript configuration. Do
   not introduce a framework, ORM, queue service, general provider layer, or new production package.
 - Keep provider request/response types in their provider modules and database operations in the
@@ -33,15 +33,15 @@ US1, not an automatic-selection shortcut.
 
 **Purpose**: Add the backend workspace and its local configuration without changing unrelated work.
 
-- [ ] T001 Create `apps/discovery/package.json` and `apps/discovery/tsconfig.json`, reuse
+- [ ] T001 Create `apps/search/package.json` and `apps/search/tsconfig.json`, reuse
       `@repo/typescript-config`, add the required Bun development types, and update `bun.lock` using
       the pinned Bun version. Define `dev`, `start`, `db:migrate`, `test`, `test:live`, and
       `check-types` scripts targeting the planned modules; exclude `tests/live-acceptance.test.ts`
       from ordinary tests and load the app's `.env.local` explicitly for runtime/migrations. Reuse
       root `package.json` workspace settings without changing Turborepo configuration.
 - [ ] T002 [P] Add secret-free examples for `EXA_API_KEY`, `TMDB_READ_ACCESS_TOKEN`, and
-      `MARGINALIA_DB_PATH` in `apps/discovery/.env.example`; update `.gitignore` for discovery
-      database, WAL, and SHM files while preserving existing local-env exclusions.
+      `MARGINALIA_DB_PATH` in `apps/search/.env.example`; update `.gitignore` for search database,
+      WAL, and SHM files while preserving existing local-env exclusions.
 
 **Checkpoint**: Dependencies install, configuration examples contain no credentials, and the app
 extends the existing workspace. Scripts become runnable as their modules are implemented.
@@ -50,36 +50,35 @@ extends the existing workspace. Scripts become runnable as their modules are imp
 
 **Purpose**: Establish storage, configuration, and local access controls shared by all stories.
 
-- [ ] T003 [P] Implement configuration and metadata-policy validation in
-      `apps/discovery/src/config.ts` and add a fail-closed `apps/discovery/metadata-policy.json`
-      template. Resolve the database path from the app directory regardless of working directory;
-      expose provider readiness without secrets, require a reviewed permission basis and fixed
-      retained/displayed field allowlists for live provider work, and keep saved reads available
-      when credentials are missing. Apply the limits from `contracts/discovery-api.md` and
-      `contracts/providers.md`.
-- [ ] T004 [P] Define `apps/discovery/migrations/001_discovery.sql` from `data-model.md`: requests,
-      ordered inputs, candidates, works, memberships, sources, discovery records, immutable
+- [ ] T003 [P] Implement configuration and metadata-policy validation in `apps/search/src/config.ts`
+      and add a fail-closed `apps/search/metadata-policy.json` template. Resolve the database path
+      from the app directory regardless of working directory; expose provider readiness without
+      secrets, require a reviewed permission basis and fixed retained/displayed field allowlists for
+      live provider work, and keep saved reads available when credentials are missing. Apply the
+      limits from `contracts/search-api.md` and `contracts/providers.md`.
+- [ ] T004 [P] Define `apps/search/migrations/001_search.sql` from `data-model.md`: requests,
+      ordered inputs, candidates, works, memberships, sources, search records, immutable
       observations, operations, attempts, rejections, and migration records. Include foreign keys,
       identity and association uniqueness, operation target constraints, and sequence/index support
       for bounded reads.
 - [ ] T005 Implement storage opening, transactions, explicit migration execution, and startup schema
-      verification in `apps/discovery/src/db.ts` after T003-T004. Verify foreign keys, WAL, and
+      verification in `apps/search/src/db.ts` after T003-T004. Verify foreign keys, WAL, and
       `synchronous=FULL`; roll back failed upgrades, reject changed migration checksums and unknown
       newer schemas, and never recreate a database on error. Use the same path for migration and
       runtime entrypoints.
-- [ ] T006 Implement the loopback server and `GET /health` in `apps/discovery/src/server.ts`:
-      validate Host, reject browser Origin/cross-site requests, enforce JSON mutations and the 16
-      KiB body limit, and return safe structured errors with correct status codes. Storage failure
-      prevents readiness; provider readiness is separate. Keep database errors visible and exclude
-      raw exceptions, provider bodies, and credentials from output.
-- [ ] T007 Add foundational checks in `apps/discovery/tests/discovery.test.ts` with temporary
-      databases and test-only configuration: migration rollback, checksum/newer-schema rejection,
-      preserved committed rows, path consistency, missing credentials/policy,
+- [ ] T006 Implement the loopback server and `GET /health` in `apps/search/src/server.ts`: validate
+      Host, reject browser Origin/cross-site requests, enforce JSON mutations and the 16 KiB body
+      limit, and return safe structured errors with correct status codes. Storage failure prevents
+      readiness; provider readiness is separate. Keep database errors visible and exclude raw
+      exceptions, provider bodies, and credentials from output.
+- [ ] T007 Add foundational checks in `apps/search/tests/search.test.ts` with temporary databases
+      and test-only configuration: migration rollback, checksum/newer-schema rejection, preserved
+      committed rows, path consistency, missing credentials/policy,
       loopback/Host/Origin/content-type/body-size controls, and fake-secret redaction. Run them and
       fix failures before story work.
 
 **Checkpoint**: Storage and local access checks pass. A missing live permission basis blocks
-provider execution without blocking saved reads. No discovery or identity claims are made yet.
+provider execution without blocking saved reads. No search or identity claims are made yet.
 
 ## Phase 3: User Story 2 - Resolve ambiguous titles explicitly (Priority: P1)
 
@@ -87,21 +86,23 @@ provider execution without blocking saved reads. No discovery or identity claims
 unconfirmed or substituted work.
 
 **Independent test**: Submit ambiguous, singleton, conflicting, and unmatched inputs; inspect and
-select candidates through the API. Assert zero discovery dispatches until all inputs resolve and
+select candidates through the API. Assert zero search dispatches until all inputs resolve and
 exactly one queued search per distinct work after the final selection. US1 supplies search
 execution.
 
 ### Tests
 
-- [ ] T008 [P] [US2] Add sanitized TMDB fixtures in `apps/discovery/tests/fixtures/tmdb.json` and
-      provider checks in `apps/discovery/tests/providers.test.ts` for remakes,
+- [ ] T008 [P] [US2] Add sanitized TMDB fixtures in `apps/search/tests/fixtures/tmdb.json` and
+      provider checks in `apps/search/tests/providers.test.ts` for remakes,
       translated/alternative-title matches, movie/TV numeric-ID collisions,
       missing/invalid/conflicting dates, one versus two search requests, deterministic capped
       interleaving, and failure of either required search. Assert exact endpoint/query/Bearer
       authentication, exclusion of adult results, atomic candidate publication, and no retained
-      overviews, images, raw responses, or fabricated revisions.
+      overviews, images, raw responses, or fabricated revisions. Assert `redirect: "error"` and
+      verify with local redirect endpoints and a fake token that the operation fails without any
+      request reaching the redirect destination.
 - [ ] T009 [P] [US2] Add submission and selection contract checks in
-      `apps/discovery/tests/discovery.test.ts`: invalid/empty/over-limit inputs cause no writes or
+      `apps/search/tests/search.test.ts`: invalid/empty/over-limit inputs cause no writes or
       provider calls, 20 inputs succeed, singleton candidates still require confirmation, decline
       remains unresolved, wrong-input/ineligible/duplicate selections and partially invalid batches
       preserve state, and concurrent final selections freeze once with one operation per distinct
@@ -109,42 +110,42 @@ execution.
 
 ### Implementation
 
-- [ ] T010 [US2] Implement bounded TMDB resolution in `apps/discovery/src/providers/tmdb.ts` using
+- [ ] T010 [US2] Implement bounded TMDB resolution in `apps/search/src/providers/tmdb.ts` using
       injected fetch and movie/TV search-result metadata as specified in `contracts/providers.md`.
       Enforce namespaced provider identities, local year eligibility, response validation, the
       20-candidate cap, per-endpoint coverage, metadata policy, and safe failures. Make one call for
       a supplied type or two when omitted; require both to succeed before publication, never hydrate
       details or auto-select a candidate.
 - [ ] T011 [US2] Implement request submission, candidate publication, selection, and decline in
-      `apps/discovery/src/discovery.ts`. Validate the entire submission before mutation; preserve
-      original inputs; reuse work identities by provider/media-type/ID while keeping local UUIDs and
+      `apps/search/src/search.ts`. Validate the entire submission before mutation; preserve original
+      inputs; reuse work identities by provider/media-type/ID while keeping local UUIDs and
       first-selected snapshots; atomically validate selection ownership, freeze the fully resolved
-      set, and queue one discovery operation per distinct work. Preserve duplicate input mappings,
+      set, and queue one search operation per distinct work. Preserve duplicate input mappings,
       allow reselection before freeze, and reject changes after freeze or capacity overflow without
       partial writes.
-- [ ] T012 [US2] Implement durable resolution dispatch in `apps/discovery/src/worker.ts`:
+- [ ] T012 [US2] Implement durable resolution dispatch in `apps/search/src/worker.ts`:
       transactionally claim one pending operation, create a unique attempt with a 60-second
       deadline, make external calls outside transactions, and publish candidates or safe failures
       only while that attempt still owns the running operation and is unexpired. Wire resolution to
-      `src/providers/tmdb.ts` and `src/discovery.ts`; do not claim discovery operations until their
+      `src/providers/tmdb.ts` and `src/search.ts`; do not claim search operations until their
       handler is added in T019.
 - [ ] T013 [US2] Wire submission, request summary, candidate listing, and selection routes in
-      `apps/discovery/src/server.ts` to `apps/discovery/src/discovery.ts` with the exact
-      response/status semantics in `contracts/discovery-api.md`. Add scoped cursor pagination for
-      candidates and expose unresolved reasons, eligibility, provenance, coverage caps, and required
-      actions; start the resolution worker after readiness.
-- [ ] T014 [US2] Run the US2 checks in `apps/discovery/tests/providers.test.ts` and
-      `apps/discovery/tests/discovery.test.ts`; verify selection survives database reopen, unsafe
-      selections leave all prior state unchanged, and final selection queues discovery exactly once.
-      Record the result and implementation revision in
-      `docs/specs/001-source-search-discovery/quickstart.md` without claiming live identity quality.
+      `apps/search/src/server.ts` to `apps/search/src/search.ts` with the exact response/status
+      semantics in `contracts/search-api.md`. Add scoped cursor pagination for candidates and expose
+      unresolved reasons, eligibility, provenance, coverage caps, and required actions; start the
+      resolution worker after readiness.
+- [ ] T014 [US2] Run the US2 checks in `apps/search/tests/providers.test.ts` and
+      `apps/search/tests/search.test.ts`; verify selection survives database reopen, unsafe
+      selections leave all prior state unchanged, and final selection queues search exactly once.
+      Record the result and implementation revision in `docs/specs/001-search/quickstart.md` without
+      claiming live identity quality.
 
-**Checkpoint**: The resolution/selection workflow is independently testable. Discovery operations
-are durable but remain pending until US1 is implemented; this is not the discovery MVP.
+**Checkpoint**: The resolution/selection workflow is independently testable. Search operations are
+durable but remain pending until US1 is implemented; this is not the search MVP.
 
-## Phase 4: User Story 1 - Discover sources for selected works (Priority: P1)
+## Phase 4: User Story 1 - Search for sources about selected works (Priority: P1)
 
-**Goal**: Execute bounded discovery for confirmed works and inspect persisted results after restart.
+**Goal**: Execute bounded search for confirmed works and inspect persisted results after restart.
 
 **Independent test**: Follow documented setup, submit and confirm three titles spanning film and
 television, discover sources including one shared source, and reopen storage to read the same
@@ -152,52 +153,52 @@ references without provider calls. Live setup timing remains a separate acceptan
 
 ### Tests
 
-- [ ] T015 [P] [US1] Add Exa fixtures in `apps/discovery/tests/fixtures/exa.json` and checks in
-      `apps/discovery/tests/providers.test.ts` for exact Search request keys, one query per selected
+- [ ] T015 [P] [US1] Add Exa fixtures in `apps/search/tests/fixtures/exa.json` and checks in
+      `apps/search/tests/providers.test.ts` for exact Search request keys, one query per selected
       work, valid empty results, caps, safe URL validation/normalization, and injected
       text/highlights/summary/raw errors that must never reach returned metadata. Assert no
-      Contents, synthesis, or unselected-work requests.
-- [ ] T016 [P] [US1] Add the complete submit-select-discover-read acceptance flow in
-      `apps/discovery/tests/discovery.test.ts`: shared sources across works, aliases resolving to
-      one membership, separate repeated requests, preserved query/rank/time observations,
-      independent title-identical URLs, bounded complete pagination, and identical saved reads after
-      database reopen without credentials or network calls.
+      Contents, synthesis, or unselected-work requests. Assert `redirect: "error"` and reuse the
+      local redirect check with a fake `x-api-key`, proving failure without any request reaching the
+      redirect destination.
+- [ ] T016 [P] [US1] Add the complete submit-select-search-read acceptance flow in
+      `apps/search/tests/search.test.ts`: shared sources across works, aliases resolving to one
+      membership, separate repeated requests, preserved query/rank/time observations, independent
+      title-identical URLs, bounded complete pagination, and identical saved reads after database
+      reopen without credentials or network calls.
 
 ### Implementation
 
-- [ ] T017 [US1] Implement Exa Search in `apps/discovery/src/providers/exa.ts` using injected fetch
-      and the exact metadata-only request/response contract. Construct one query from each frozen
-      work selection, retain permitted metadata and notices only, validate and normalize public
+- [ ] T017 [US1] Implement Exa Search in `apps/search/src/providers/exa.ts` using injected fetch and
+      the exact metadata-only request/response contract. Construct one query from each frozen work
+      selection, retain permitted metadata and notices only, validate and normalize public
       HTTP/HTTPS source locations without fetching them, classify provider/response failures, and
       expose returned/retained/rejected counts and limit indicators.
-- [ ] T018 [US1] Implement atomic discovery publication in `apps/discovery/src/discovery.ts`: reuse
+- [ ] T018 [US1] Implement atomic search publication in `apps/search/src/search.ts`: reuse
       normalized source identities, retain per-attempt observations and all request/work
       associations, save safe rejected-result reasons, and mark success only after all local writes
       commit. Validate attempt ownership/deadline and selected-work membership; roll back storage
       failures, never add unselected works, and never merge different URLs by title.
-- [ ] T019 [US1] Extend `apps/discovery/src/worker.ts` with the discovery handler using
-      `src/providers/exa.ts` and `src/discovery.ts`. Run one external call at a time with bounded
+- [ ] T019 [US1] Extend `apps/search/src/worker.ts` with the search handler using
+      `src/providers/exa.ts` and `src/search.ts`. Run one external call at a time with bounded
       response consumption, persist successful empty outcomes distinctly from failures, and preserve
       completed operations across process restart. Wire clean startup/shutdown in
-      `apps/discovery/src/server.ts`; active cancellation becomes interrupted rather than
-      successful.
+      `apps/search/src/server.ts`; active cancellation becomes interrupted rather than successful.
 - [ ] T020 [US1] Add saved request listing, selected works, collection sources, and stable
-      work/source detail reads in `apps/discovery/src/discovery.ts` and their routes in
-      `apps/discovery/src/server.ts`. Use scoped snapshot/keyset pagination with 1-100 rows, reject
+      work/source detail reads in `apps/search/src/search.ts` and their routes in
+      `apps/search/src/server.ts`. Use scoped snapshot/keyset pagination with 1-100 rows, reject
       malformed/mismatched cursors, include all work associations, and read only persisted records
       with current display restrictions and explicit candidate/unknown-rights markers.
 - [ ] T021 [US1] Replace the starter instructions in `README.md` with actual install, configuration,
       permission-policy, stopped-server migration, startup, confirmation, and saved-read examples
-      matching `docs/specs/001-source-search-discovery/quickstart.md`. Run the US1
-      provider/integration checks in `apps/discovery/tests/providers.test.ts` and
-      `apps/discovery/tests/discovery.test.ts`; record results without presenting fixture relevance
-      or timing as live acceptance.
+      matching `docs/specs/001-search/quickstart.md`. Run the US1 provider/integration checks in
+      `apps/search/tests/providers.test.ts` and `apps/search/tests/search.test.ts`; record results
+      without presenting fixture relevance or timing as live acceptance.
 
-**Checkpoint**: US2 plus US1 deliver the first usable discovery increment. All inputs require
+**Checkpoint**: US2 plus US1 deliver the first usable search increment. All inputs require
 confirmation, metadata remains bounded and permitted, and saved results survive restart. US3 and US4
 remain required for full feature completion.
 
-## Phase 5: User Story 3 - Inspect incomplete discovery and retry failures (Priority: P2)
+## Phase 5: User Story 3 - Inspect incomplete search and retry failures (Priority: P2)
 
 **Goal**: Make failures and interruptions inspectable and retry only failed or unfinished work.
 
@@ -207,47 +208,46 @@ prove that retry preserves completed results and stale attempts cannot publish.
 
 ### Tests
 
-- [ ] T022 [P] [US3] Add recovery checks in `apps/discovery/tests/recovery.test.ts` using a child
+- [ ] T022 [P] [US3] Add recovery checks in `apps/search/tests/recovery.test.ts` using a child
       runtime, controlled provider responses, and a temporary persistent database: kill during a
       call, restart, expire the original attempt, resume pending work, and retry interrupted work.
       Separately release a delayed response from an expired attempt in a surviving worker to prove
       it cannot overwrite a newer attempt; a response from a killed process cannot be released.
       Check graceful cancellation and surviving committed IDs/results.
-- [ ] T023 [P] [US3] Add status/retry contract checks in `apps/discovery/tests/discovery.test.ts`
-      for partial success, provider-empty versus all-rejected results, resolution failures, rate
-      limits, Retry-After/fallback delays, wrong-request or active/completed operation IDs, early
-      retries, duplicate retries, and local-capacity rejection. Assert failures never become
-      successful empty searches and completed calls/results never repeat.
+- [ ] T023 [P] [US3] Add status/retry contract checks in `apps/search/tests/search.test.ts` for
+      partial success, provider-empty versus all-rejected results, resolution failures, rate limits,
+      Retry-After/fallback delays, wrong-request or active/completed operation IDs, early retries,
+      duplicate retries, and local-capacity rejection. Assert failures never become successful empty
+      searches and completed calls/results never repeat.
 
 ### Implementation
 
 - [ ] T024 [US3] Implement failure retry and derived request/per-work status in
-      `apps/discovery/src/discovery.ts` following `data-model.md`. Preserve all required actions and
+      `apps/search/src/search.ts` following `data-model.md`. Preserve all required actions and
       failures independently of summary precedence; validate explicit operation lists atomically,
       queue only due failed/interrupted operations, keep unresolved title searches out of technical
       retries, enforce capacity, and retain closed attempts and successful results.
-- [ ] T025 [US3] Complete recovery in `apps/discovery/src/worker.ts` and saved status reads in
-      `apps/discovery/src/discovery.ts`: sweep expired attempts once per second and at startup,
-      interpret expired running work as interrupted on reads, resume pending work, and require
-      explicit retry for interrupted work. Honor provider retry times with no automatic retries and
-      preserve attempt-ownership checks on every late success/failure write.
+- [ ] T025 [US3] Complete recovery in `apps/search/src/worker.ts` and saved status reads in
+      `apps/search/src/search.ts`: sweep expired attempts once per second and at startup, interpret
+      expired running work as interrupted on reads, resume pending work, and require explicit retry
+      for interrupted work. Honor provider retry times with no automatic retries and preserve
+      attempt-ownership checks on every late success/failure write.
 - [ ] T026 [US3] Expose retry, operation listing, and attempt-history routes in
-      `apps/discovery/src/server.ts` using `apps/discovery/src/discovery.ts`, with bounded history,
-      affected input/work IDs, safe reasons, retry times, and actionable next steps. Match
-      `contracts/discovery-api.md` status codes and distinguish readable failed-operation records
-      from HTTP/storage failures.
-- [ ] T027 [US3] Run `apps/discovery/tests/recovery.test.ts` and the retry/status cases in
-      `apps/discovery/tests/discovery.test.ts`; record restart, stale-response, and selective-retry
-      evidence in `docs/specs/001-source-search-discovery/quickstart.md`. Document the possible
-      repeated provider charge after a crash before local commit without claiming exactly-once
-      provider execution.
+      `apps/search/src/server.ts` using `apps/search/src/search.ts`, with bounded history, affected
+      input/work IDs, safe reasons, retry times, and actionable next steps. Match
+      `contracts/search-api.md` status codes and distinguish readable failed-operation records from
+      HTTP/storage failures.
+- [ ] T027 [US3] Run `apps/search/tests/recovery.test.ts` and the retry/status cases in
+      `apps/search/tests/search.test.ts`; record restart, stale-response, and selective-retry
+      evidence in `docs/specs/001-search/quickstart.md`. Document the possible repeated provider
+      charge after a crash before local commit without claiming exactly-once provider execution.
 
 **Checkpoint**: Failed work is recoverable without duplicating completed associations. No stale
 attempt can publish and no request remains permanently running after processing has stopped.
 
 ## Phase 6: User Story 4 - Assess source candidates before ingestion (Priority: P2)
 
-**Goal**: Inspect complete discovery provenance, incomplete/restricted metadata, and unverified work
+**Goal**: Inspect complete search provenance, incomplete/restricted metadata, and unverified work
 relevance without implying content rights or established evidence.
 
 **Independent test**: Inspect a multi-work source and sources with missing/restricted metadata.
@@ -256,31 +256,30 @@ historical reads suppress it while retaining safe identities, counts, and status
 
 ### Tests
 
-- [ ] T028 [P] [US4] Extend `apps/discovery/tests/providers.test.ts` with restrictive
-      response/result notices, unreviewed policy, missing/invalid/oversized optional fields, unknown
-      bounded notice codes, and unexpected content fields. Assert fail-closed retention, explicit
-      null/warning handling, safe error redaction, and unknown source-content permissions without
-      fetching source pages.
-- [ ] T029 [P] [US4] Extend `apps/discovery/tests/discovery.test.ts` with provenance reads for
-      shared sources, original request observations after later discoveries, paginated
-      rejection/observation history, and historical display-policy suppression. Assert query/rank
-      attribution, explicit missing/restricted fields, no fabricated publisher, no exposed raw URLs
-      in rejection records, and no bodies, claims, or inferred rights in storage/logs/output.
+- [ ] T028 [P] [US4] Extend `apps/search/tests/providers.test.ts` with restrictive response/result
+      notices, unreviewed policy, missing/invalid/oversized optional fields, unknown bounded notice
+      codes, and unexpected content fields. Assert fail-closed retention, explicit null/warning
+      handling, safe error redaction, and unknown source-content permissions without fetching source
+      pages.
+- [ ] T029 [P] [US4] Extend `apps/search/tests/search.test.ts` with provenance reads for shared
+      sources, original request observations after later searches, paginated rejection/observation
+      history, and historical display-policy suppression. Assert query/rank attribution, explicit
+      missing/restricted fields, no fabricated publisher, no exposed raw URLs in rejection records,
+      and no bodies, claims, or inferred rights in storage/logs/output.
 
 ### Implementation
 
-- [ ] T030 [US4] Complete observation and rejection queries in `apps/discovery/src/discovery.ts` and
-      expose their routes in `apps/discovery/src/server.ts`, including source observations with
-      optional request filtering. Return stable identity, selected-work links, discovery
+- [ ] T030 [US4] Complete observation and rejection queries in `apps/search/src/search.ts` and
+      expose their routes in `apps/search/src/server.ts`, including source observations with
+      optional request filtering. Return stable identity, selected-work links, search
       origin/time/query/rank/notices, safe rejection counts/reasons, and bounded history; preserve
       original request observations and enforce current display allowlists on every historical read.
-- [ ] T031 [US4] Complete and verify the metadata edge cases in `apps/discovery/src/config.ts`,
-      `apps/discovery/src/providers/tmdb.ts`, and `apps/discovery/src/providers/exa.ts`: reject
+- [ ] T031 [US4] Complete and verify the metadata edge cases in `apps/search/src/config.ts`,
+      `apps/search/src/providers/tmdb.ts`, and `apps/search/src/providers/exa.ts`: reject
       restrictive retained metadata, null invalid optional values with safe warnings, preserve
       restriction indicators, and prevent policy from enabling source text or synthesis. Run the US4
-      checks in `apps/discovery/tests/providers.test.ts` and
-      `apps/discovery/tests/discovery.test.ts` and record evidence in
-      `docs/specs/001-source-search-discovery/quickstart.md`.
+      checks in `apps/search/tests/providers.test.ts` and `apps/search/tests/search.test.ts` and
+      record evidence in `docs/specs/001-search/quickstart.md`.
 
 **Checkpoint**: Every saved candidate is assessable with provenance and uncertainty intact. No
 source ingestion, extraction, or permission inference is introduced.
@@ -290,35 +289,35 @@ source ingestion, extraction, or permission inference is introduced.
 **Purpose**: Verify the whole deliverable, its setup instructions, and live acceptance separately.
 
 - [ ] T032 [P] Add the predeclared ten-work corpus and relevance rubric in
-      `apps/discovery/tests/fixtures/live-corpus.json` and the opt-in evaluator in
-      `apps/discovery/tests/live-acceptance.test.ts`. Include TMDB media-type/ID identities,
+      `apps/search/tests/fixtures/live-corpus.json` and the opt-in evaluator in
+      `apps/search/tests/live-acceptance.test.ts`. Include TMDB media-type/ID identities,
       film/series, remakes, and aliases; require explicit live opt-in, reviewed metadata policy,
       credentials, and recorded human relevance judgments. Version the corpus before running;
       missing judgments/evidence must not count as a pass, and ordinary tests must exclude this
       suite.
-- [ ] T033 [P] Reconcile `README.md` and `docs/specs/001-source-search-discovery/quickstart.md` with
-      implemented commands, endpoints, limits, startup/recovery behavior, and permission-policy
-      setup. Add operator credits with the approved TMDB logo and required attribution notice linked
-      from provider provenance. Keep credentials out of examples and retain distinct planned,
+- [ ] T033 [P] Reconcile `README.md` and `docs/specs/001-search/quickstart.md` with implemented
+      commands, endpoints, limits, startup/recovery behavior, and permission-policy setup. Add
+      operator credits with the approved TMDB logo and required attribution notice linked from
+      provider provenance. Keep credentials out of examples and retain distinct planned,
       deterministic, and live evidence labels. Remove obsolete claims about nonexistent runtime
       components only after checking actual files.
-- [ ] T034 Run the complete deterministic suites in `apps/discovery/tests/discovery.test.ts`,
-      `apps/discovery/tests/providers.test.ts`, and `apps/discovery/tests/recovery.test.ts`, app
+- [ ] T034 Run the complete deterministic suites in `apps/search/tests/search.test.ts`,
+      `apps/search/tests/providers.test.ts`, and `apps/search/tests/recovery.test.ts`, app
       `check-types`, repository lint, and formatting checks. Fix failures in their owning files,
       verify no accidental production dependencies or unrequested features, and record
-      commands/results/revision in `docs/specs/001-source-search-discovery/quickstart.md`.
+      commands/results/revision in `docs/specs/001-search/quickstart.md`.
 - [ ] T035 Verify actual provider retention/display permission bases and record approved fields,
-      references, and review dates in `apps/discovery/metadata-policy.json` before any live
-      retention. If account permission evidence is unavailable, leave the affected provider disabled
-      and record the exact blocker in `docs/specs/001-source-search-discovery/quickstart.md`;
-      fixtures are not permission evidence.
+      references, and review dates in `apps/search/metadata-policy.json` before any live retention.
+      If account permission evidence is unavailable, leave the affected provider disabled and record
+      the exact blocker in `docs/specs/001-search/quickstart.md`; fixtures are not permission
+      evidence.
 - [ ] T036 Execute fresh-checkout setup and the live workflow in
-      `docs/specs/001-source-search-discovery/quickstart.md` after T032-T035, using
-      `apps/discovery/tests/live-acceptance.test.ts` and the unchanged versioned corpus. Record
-      setup time, correct identities for all ten works, reviewer relevance for at least nine,
-      permitted references, limits/failures, and SC-001 through SC-006 as PASS, FAIL, or NOT RUN
-      with evidence. Do not mark this task complete if required credentials, permission review,
-      human scoring, or live execution is missing.
+      `docs/specs/001-search/quickstart.md` after T032-T035, using
+      `apps/search/tests/live-acceptance.test.ts` and the unchanged versioned corpus. Record setup
+      time, correct identities for all ten works, reviewer relevance for at least nine, permitted
+      references, limits/failures, and SC-001 through SC-006 as PASS, FAIL, or NOT RUN with
+      evidence. Do not mark this task complete if required credentials, permission review, human
+      scoring, or live execution is missing.
 
 **Checkpoint**: Full completion requires all four stories and acceptance evidence. Fixture passes
 cannot establish live relevance, account permissions, or the 30-minute fresh-checkout target.
@@ -341,9 +340,9 @@ Setup T001-T002
   verifies the complete foundation.
 - Within each story, the two initial test tasks can run together. Implementation begins after both
   have defined the expected contracts. Run the story's checks before leaving its phase.
-- US2 is a real prerequisite for US1. US3 builds on discovery attempts and outcomes. US4 follows US3
-  so its inspection can link to complete attempt/failure history. Do not claim story-level
-  parallelism across their shared `discovery.ts`, `server.ts`, or test files.
+- US2 is a real prerequisite for US1. US3 builds on search attempts and outcomes. US4 follows US3 so
+  its inspection can link to complete attempt/failure history. Do not claim story-level parallelism
+  across their shared `search.ts`, `server.ts`, or test files.
 - T032 and T033 can run together after all stories. T034 validates the final code/docs; T035
   establishes live permission evidence; T036 requires all earlier acceptance tasks.
 - Do not commit unrelated existing changes. The live corpus must be fixed in version control before
@@ -369,7 +368,7 @@ These are scheduling examples, not commands to spawn agents automatically.
 | Requirements     | Primary tasks                                                                                    |
 | ---------------- | ------------------------------------------------------------------------------------------------ |
 | FR-001 to FR-004 | T008-T014: bounded input, stable identity, explicit selection, atomic freeze                     |
-| FR-005 to FR-007 | T015-T020: selected-work discovery, metadata/provenance, identity reuse                          |
+| FR-005 to FR-007 | T015-T020: selected-work search, metadata/provenance, identity reuse                             |
 | FR-008           | T013, T020-T021, T026, T030: complete developer interface and saved reads                        |
 | FR-009 to FR-010 | T022-T027: coverage/status, failure reasons, retries and restart                                 |
 | FR-011           | T004-T005, T011-T012, T018-T020, T022-T027: durable records and outcomes                         |
@@ -378,7 +377,7 @@ These are scheduling examples, not commands to spawn agents automatically.
 | FR-014 to FR-016 | T002-T003, T006-T010, T015-T017, T028-T031, T035: metadata rights, safe local access and secrets |
 | SC-001           | T021, T033, T036: timed fresh-checkout three-title workflow                                      |
 | SC-002           | T032, T035-T036: fixed ten-work live corpus and recorded relevance judgments                     |
-| SC-003           | T008-T014, T015-T019: unresolved inputs cannot trigger unconfirmed/expanded discovery            |
+| SC-003           | T008-T014, T015-T019: unresolved inputs cannot trigger unconfirmed/expanded search               |
 | SC-004           | T016, T018-T020, T022-T027: stable references, deduplication and recovery                        |
 | SC-005           | T022-T027, T030: inspectable coverage and selective retry                                        |
 | SC-006           | T015-T020, T028-T031, T034-T036: provenance and metadata-only evidence                           |
@@ -386,7 +385,7 @@ These are scheduling examples, not commands to spawn agents automatically.
 ## Implementation strategy
 
 1. Complete setup and foundation with the existing modules and dependencies.
-2. Deliver and verify US2's selection workflow, then US1's persisted discovery. This is the MVP for
+2. Deliver and verify US2's selection workflow, then US1's persisted search. This is the MVP for
    local demonstration; ambiguity protections and permission checks remain active throughout.
 3. Add and verify US3 recovery, then US4's complete candidate inspection. Reuse earlier behavior and
    tests rather than implementing separate write paths.

@@ -19,13 +19,11 @@ that real data.
   are usable without application pages; their graphical interface arrives with the application.
 - The repository currently contains workspace tooling, shared TypeScript configuration, and Spec Kit
   setup. Nothing below is implemented. Stack, providers, schemas, and extraction methods are chosen
-  in feature plans. The
-  [source search and discovery spec](specs/001-source-search-discovery/spec.md) covers backend
-  feature 1.
+  in feature plans. The [search spec](specs/001-search/spec.md) covers backend feature 1.
 
 ## Backend features
 
-### 1. Source search and discovery
+### 1. Search
 
 Resolve a caller-selected set of film or television titles and discover relevant external sources
 for researching them together. Ambiguous matches are exposed for caller resolution, and automatic

@@ -1,16 +1,16 @@
-# Feature Specification: Source search and discovery
+# Feature Specification: Search
 
-**Feature Branch**: `feat-001-source-search-discovery`
+**Feature Branch**: `feat-001-search`
 
 **Created**: 2026-10-22
 
 **Status**: Draft
 
-**Input**: User description: "docs/roadmap.md #1, Source search and discovery"
+**Input**: User description: "docs/roadmap.md #1, Search"
 
 ## User Scenarios & Testing _(mandatory)_
 
-### User Story 1 - Discover sources for selected works (Priority: P1)
+### User Story 1 - Search for sources about selected works (Priority: P1)
 
 A developer submits a collection of film or television titles and inspects the resolved works and
 external sources relevant to researching them together. Saved results remain available after local
@@ -32,7 +32,7 @@ locally and inspect the same results by their saved references.
    input maps to its resolved work, and source candidates are associated with the selected works and
    their collection.
 3. **Given** a source returned for multiple selected works, **When** the developer inspects the
-   collection, **Then** one source identity retains all those associations and their discovery
+   collection, **Then** one source identity retains all those associations and their search
    provenance.
 4. **Given** saved results, **When** the runtime restarts, **Then** the same request, work
    identities, source identities, and associations remain readable without repeating searches.
@@ -42,22 +42,22 @@ locally and inspect the same results by their saved references.
 ### User Story 2 - Resolve ambiguous titles explicitly (Priority: P1)
 
 A developer distinguishes remakes, similarly named works, and film versus television matches before
-discovery begins. They inspect candidates and choose the intended work.
+search begins. They inspect candidates and choose the intended work.
 
-**Why this priority**: Discovering sources for the wrong work would undermine later research.
+**Why this priority**: Searching for sources about the wrong work would undermine later research.
 Uncertainty must remain visible at selection.
 
 **Independent Test**: Submit an ambiguous title, inspect the candidates, and select one. Verify that
-discovery begins only after every input in the collection is resolved.
+search begins only after every input in the collection is resolved.
 
 **Acceptance Scenarios**:
 
 1. **Given** an ambiguous title, **When** resolution returns multiple plausible works, **Then** the
-   request requires caller selection and exposes distinguishing candidate details. Discovery has not
+   request requires caller selection and exposes distinguishing candidate details. Search has not
    started for the collection.
 2. **Given** a pending selection, **When** the caller selects a candidate belonging to that input,
-   **Then** the system saves the choice and its stable work reference. Discovery can proceed once
-   every input is resolved.
+   **Then** the system saves the choice and its stable work reference. Search can proceed once every
+   input is resolved.
 3. **Given** no match or no acceptable candidate, **When** the caller inspects the request or
    declines the candidates, **Then** the input remains explicitly unresolved with guidance to submit
    a clarified title. The system does not invent a work or select a substitute.
@@ -66,7 +66,7 @@ discovery begins only after every input in the collection is resolved.
 
 ---
 
-### User Story 3 - Inspect incomplete discovery and retry failures (Priority: P2)
+### User Story 3 - Inspect incomplete search and retry failures (Priority: P2)
 
 A developer distinguishes a completed search with no results from a failed or unstarted search. They
 can retry failures while keeping successful results available.
@@ -74,15 +74,15 @@ can retry failures while keeping successful results available.
 **Why this priority**: External failures must not hide coverage gaps or force the developer to lose
 useful results.
 
-**Independent Test**: Make discovery succeed for one selected work and fail for another. Inspect and
+**Independent Test**: Make search succeed for one selected work and fail for another. Inspect and
 retry the failed portion, confirming successful results and identities remain intact.
 
 **Acceptance Scenarios**:
 
 1. **Given** a completed search with no usable results, **When** the caller inspects the request,
    **Then** that work is marked as searched with no sources found, distinct from failed or pending.
-2. **Given** a timeout, access failure, or service limit during resolution or discovery, **When**
-   the caller inspects progress, **Then** the failed operation, affected inputs or works, and useful
+2. **Given** a timeout, access failure, or service limit during resolution or search, **When** the
+   caller inspects progress, **Then** the failed operation, affected inputs or works, and useful
    reason are visible. Completed results remain readable and the request does not report full
    success.
 3. **Given** a failed operation, **When** the caller retries after addressing the cause, **Then**
@@ -97,14 +97,14 @@ retry the failed portion, confirming successful results and identities remain in
 ### User Story 4 - Assess source candidates before ingestion (Priority: P2)
 
 A developer inspects where sources came from and which selected works they may concern. They can
-pass stable references to later ingestion work without mistaking discovery for verified evidence or
+pass stable references to later ingestion work without mistaking search for verified evidence or
 permission to reuse content.
 
 **Why this priority**: Source candidates need enough context to assess relevance and preserve
 provenance.
 
 **Independent Test**: Inspect a saved source associated with multiple works and one with incomplete
-metadata. Verify usable locations, discovery provenance, and explicit missing information.
+metadata. Verify usable locations, search provenance, and explicit missing information.
 
 **Acceptance Scenarios**:
 
@@ -129,13 +129,13 @@ metadata. Verify usable locations, discovery provenance, and explicit missing in
   being silently ignored. Missing candidate details are displayed as unknown.
 - Repeated source locations reuse an identity. Different locations are not merged merely because
   their titles match. Missing or unusable locations are reported as rejected results.
-- Reaching a discovery limit is reported as bounded coverage, not exhaustive research. Saved results
+- Reaching a search limit is reported as bounded coverage, not exhaustive research. Saved results
   can be read in bounded portions without losing access to the rest.
-- Changing a resolved work after discovery begins requires a new request, preserving the meaning of
-  the original request and its source associations.
+- Changing a resolved work after search begins requires a new request, preserving the meaning of the
+  original request and its source associations.
 - Missing configuration blocks the affected operation with an actionable error. Failed storage
   initialization or upgrades do not report readiness or discard existing records.
-- Credentials never appear in saved discovery results or ordinary error output.
+- Credentials never appear in saved search results or ordinary error output.
 
 ## Requirements _(mandatory)_
 
@@ -150,19 +150,19 @@ metadata. Verify usable locations, discovery provenance, and explicit missing in
 - **FR-003**: The system MUST expose ambiguous matches for explicit caller selection. Unmatched
   inputs and declined candidates MUST remain unresolved. Selections MUST belong to the candidates
   for that input and be retained with the request.
-- **FR-004**: Discovery MUST start only when every input has a resolved work. The selected work set
-  MUST remain fixed after discovery starts; changing it requires another request. Discovery MUST NOT
+- **FR-004**: Search MUST start only when every input has a resolved work. The selected work set
+  MUST remain fixed after search starts; changing it requires another request. Search MUST NOT
   automatically expand the collection to other works.
 - **FR-005**: The system MUST discover external source candidates for the resolved collection and
   associate them with the selected works they may concern. A source MAY concern multiple selected
   works. These associations MUST NOT assert verified relationships between works.
 - **FR-006**: Every retained source MUST have a stable identity and usable external location.
   Inspection MUST include available title, author or publisher, and publication date, with missing
-  values explicit. It MUST also expose discovery time, search origin, search terms or equivalent
+  values explicit. It MUST also expose search time, search origin, search terms or equivalent
   context, and any available relevance basis, attributed to its origin.
-- **FR-007**: Repeated discovery of a known source location MUST reuse its identity while retaining
-  discovery provenance and work associations. Retries and repeated requests MUST NOT create
-  duplicate work memberships or source associations within a request. Different requests MUST remain
+- **FR-007**: Repeated search of a known source location MUST reuse its identity while retaining
+  search provenance and work associations. Retries and repeated requests MUST NOT create duplicate
+  work memberships or source associations within a request. Different requests MUST remain
   separately inspectable.
 - **FR-008**: Callers MUST be able to submit, inspect progress, select candidates, retry failures,
   and read saved works and sources through a documented developer interface without application
@@ -174,39 +174,39 @@ metadata. Verify usable locations, discovery provenance, and explicit missing in
   preserve completed results and repeat only failed or unfinished work. Interrupted requests MUST
   become resumable or retryable after restart.
 - **FR-011**: The system MUST persist requests, resolution choices, work and source identities,
-  associations, discovery provenance, and operation outcomes. Saved results MUST remain inspectable
+  associations, search provenance, and operation outcomes. Saved results MUST remain inspectable
   without contacting external services again.
 - **FR-012**: Local setup MUST document prerequisites, required configuration, storage
   initialization and upgrades, startup, and example submission and inspection. Missing configuration
   and failed storage initialization or upgrades MUST fail visibly without reporting readiness or
   discarding existing saved results.
-- **FR-013**: Discovery and inspection MUST have documented finite limits. Callers MUST be able to
-  identify when discovery reached a limit and read all saved results in bounded portions. Failures
-  MUST NOT be converted into successful empty searches.
-- **FR-014**: This feature MUST retain and expose only discovery metadata permitted for those uses.
-  It MUST NOT fetch or retain source bodies, request full source content during discovery, or
-  extract claims. Discovery and attribution MUST NOT imply permission to process, quote, or
-  republish a source. Unknown permissions MUST remain unknown for later ingestion assessment.
+- **FR-013**: Search and inspection MUST have documented finite limits. Callers MUST be able to
+  identify when search reached a limit and read all saved results in bounded portions. Failures MUST
+  NOT be converted into successful empty searches.
+- **FR-014**: This feature MUST retain and expose only search metadata permitted for those uses. It
+  MUST NOT fetch or retain source bodies, request full source content during search, or extract
+  claims. Search and attribution MUST NOT imply permission to process, quote, or republish a source.
+  Unknown permissions MUST remain unknown for later ingestion assessment.
 - **FR-015**: Results MUST distinguish source candidates and unverified relevance information from
   established evidence. Missing metadata MUST NOT be invented. Results rejected for unusable source
-  locations MUST be visible in the discovery outcome.
+  locations MUST be visible in the search outcome.
 - **FR-016**: The initial workflow MUST be operable by a trusted developer locally without public
-  accounts or a graphical interface. Configuration secrets MUST be excluded from saved discovery
+  accounts or a graphical interface. Configuration secrets MUST be excluded from saved search
   records and ordinary output.
 
 ### Key Entities _(include if feature involves data)_
 
-- **Discovery request**: One caller-selected collection, its original inputs, fixed resolved work
-  set, limits, progress, and saved results.
+- **Search request**: One caller-selected collection, its original inputs, fixed resolved work set,
+  limits, progress, and saved results.
 - **Title input and resolution**: Supplied title and optional details, candidate matches, unresolved
   status or chosen work, and the basis for resolution.
 - **Work**: A stable film or television identity with distinguishing metadata and identity
   provenance, reusable across requests.
 - **Source**: A stable external source identity, location, descriptive metadata, and any known
-  restrictions on retained discovery metadata. Its content has not been ingested.
-- **Discovery record**: A source's association with a request and one or more selected works,
-  including search origin, time, context, and available relevance information.
-- **Operation outcome**: Resolution or discovery progress and results, including affected inputs or
+  restrictions on retained search metadata. Its content has not been ingested.
+- **Search record**: A source's association with a request and one or more selected works, including
+  search origin, time, context, and available relevance information.
+- **Operation outcome**: Resolution or search progress and results, including affected inputs or
   works, failure information, and retry status.
 
 ## Success Criteria _(mandatory)_
@@ -219,9 +219,9 @@ metadata. Verify usable locations, discovery provenance, and explicit missing in
 - **SC-002**: In an acceptance collection of ten unambiguous titles with known discoverable sources,
   every title resolves to the intended work and at least nine works have one source a reviewer
   judges relevant to researching that work. Every retained source has an inspectable location and
-  discovery origin. The evaluation collection and relevance rubric are recorded before the run.
+  search origin. The evaluation collection and relevance rubric are recorded before the run.
 - **SC-003**: All acceptance cases involving ambiguous, unmatched, or conflicting inputs remain
-  explicit until resolved. No such case starts discovery with an unconfirmed work, and no acceptance
+  explicit until resolved. No such case starts search with an unconfirmed work, and no acceptance
   case adds an unselected work.
 - **SC-004**: Across restart, retry, and repeated-submission acceptance cases, all saved references
   remain usable, with zero duplicate work memberships or source associations within a request and no
@@ -230,27 +230,27 @@ metadata. Verify usable locations, discovery provenance, and explicit missing in
   reached, the caller can identify coverage and the next action from saved status. Failed work can
   complete after retry without repeating completed work.
 - **SC-006**: Every source inspected in acceptance testing exposes its selected-work associations
-  and discovery provenance. No result contains a retrieved source body, extracted claim, fabricated
-  metadata, or permission inferred merely from discovery.
+  and search provenance. No result contains a retrieved source body, extracted claim, fabricated
+  metadata, or permission inferred merely from search.
 
 ## Assumptions
 
-- Scope follows [roadmap feature 1](../../roadmap.md#1-source-search-and-discovery), constrained by
+- Scope follows [roadmap feature 1](../../roadmap.md#1-search), constrained by
   [product](../../product.md), [architecture](../../architecture.md), and the
   [constitution](../../../.specify/memory/constitution.md). No earlier backend feature is required.
 - The caller is a trusted developer running locally. Public hosting, sign-in, native publishing,
   curation, and application pages belong to later features.
 - Film and television series identities are the initial resolution targets. Separate season,
   episode, scene, and timestamp targeting is outside this feature.
-- A collection waits for all title resolutions before discovery. Callers submit a new request to
+- A collection waits for all title resolutions before search. Callers submit a new request to
   correct an unmatched title or change the work set, keeping prior requests inspectable.
 - External identity and search services require network access and any documented credentials.
   Providers, storage, runtime, migration mechanisms, and interface protocols are selected during
   planning. This specification does not adopt choices from an earlier research plan.
-- Discovery stores permitted metadata and references only. Rights-aware retrieval, retention of
-  source material, complaint handling, and processing-versus-display decisions belong to feature 2.
+- Search stores permitted metadata and references only. Rights-aware retrieval, retention of source
+  material, complaint handling, and processing-versus-display decisions belong to feature 2.
   Extraction belongs to feature 3, and full knowledge queries and deployment belong to feature 4.
-- Discovery is bounded search, not a claim to find every relevant source. Candidates can support
-  research across selected works without proving a claim or relationship.
+- Searches have finite coverage and do not claim to find every relevant source. Candidates can
+  support research across selected works without proving a claim or relationship.
 - Timing and relevance criteria are acceptance targets for implementation, not current behavior
   claims or guarantees of third-party availability.

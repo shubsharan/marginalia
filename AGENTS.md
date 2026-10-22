@@ -22,5 +22,5 @@ block committed with your work to avoid an uncommitted change on the next agent 
 <!-- SPECKIT START -->
 
 For additional context about technologies to be used, project structure, shell commands, and other
-important information, read the current plan at docs/specs/001-source-search-discovery/plan.md
+important information, read the current plan at docs/specs/001-search/plan.md
 <!-- SPECKIT END -->
