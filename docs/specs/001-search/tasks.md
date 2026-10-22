@@ -7,7 +7,10 @@
 [provider contract](contracts/providers.md), and [quickstart.md](quickstart.md). Follow
 `.specify/memory/constitution.md` version 3.0.0.
 
-**Status**: Tasks generated. No implementation or runtime acceptance checks have run.
+**Status**: Phase 1 setup complete. Bun 1.4.2 frozen install, temporary setup probes for test
+isolation/live-suite exclusion, shared TypeScript/Bun types, and runtime/migration environment
+loading passed. Probes were removed after validation. Formatting and diff checks passed. Repository
+lint found no source files to lint. Application runtime and feature acceptance remain NOT RUN.
 
 **Tests**: Tasks implement the specification's independent tests, acceptance scenarios, and SC-001
 through SC-006 using the suites selected in the plan. Write each story's checks before its
@@ -33,13 +36,13 @@ not an automatic-selection shortcut.
 
 **Purpose**: Add the backend workspace and its local configuration without changing unrelated work.
 
-- [ ] T001 Create `apps/search/package.json` and `apps/search/tsconfig.json`, reuse
+- [x] T001 Create `apps/search/package.json` and `apps/search/tsconfig.json`, reuse
       `@repo/typescript-config`, add the required Bun development types, and update `bun.lock` using
       the pinned Bun version. Define `dev`, `start`, `db:migrate`, `test`, `test:live`, and
       `check-types` scripts targeting the planned modules; exclude `tests/live-acceptance.test.ts`
       from ordinary tests and load the app's `.env.local` explicitly for runtime/migrations. Reuse
       root `package.json` workspace settings without changing Turborepo configuration.
-- [ ] T002 [P] Add secret-free examples for `EXA_API_KEY`, `TMDB_READ_ACCESS_TOKEN`, and
+- [x] T002 [P] Add secret-free examples for `EXA_API_KEY`, `TMDB_READ_ACCESS_TOKEN`, and
       `MARGINALIA_DB_PATH` in `apps/search/.env.example`; update `.gitignore` for search database,
       WAL, and SHM files while preserving existing local-env exclusions.
 
