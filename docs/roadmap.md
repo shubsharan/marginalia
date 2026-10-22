@@ -19,7 +19,9 @@ that real data.
   are usable without application pages; their graphical interface arrives with the application.
 - The repository currently contains workspace tooling, shared TypeScript configuration, and Spec Kit
   setup. Nothing below is implemented. Stack, providers, schemas, and extraction methods are chosen
-  in feature plans. The existing `001-research-work-collection` spec spans backend features 1–4.
+  in feature plans. The
+  [source search and discovery spec](specs/001-source-search-discovery/spec.md) covers backend
+  feature 1.
 
 ## Backend features
 
