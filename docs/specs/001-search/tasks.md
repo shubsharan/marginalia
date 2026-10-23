@@ -8,8 +8,9 @@
 `.specify/memory/constitution.md` version 3.0.0.
 
 **Status**: Search is partially implemented through Phase 4. Simplification tasks T037-T040 and
-Phase 4 tasks T015-T021 are complete; Phases 5-7 remain planned. Current verification is recorded
-separately in [quickstart.md](quickstart.md).
+Phase 4 tasks T015-T021 are complete and cover T030's source-observation reads. Recovery, remaining
+metadata checks, and acceptance remain planned. Current verification is recorded separately in
+[quickstart.md](quickstart.md).
 
 **Historical Phase 3 evidence**: On 2026-10-23, Bun 1.4.2 passed 82 tests and 408 assertions against
 sanitized fixtures, temporary databases, and loopback HTTP servers. US2 checks cover bounded TMDB
@@ -275,32 +276,26 @@ status remain readable.
 
 ### Tests
 
-- [ ] T028 [P] [US4] Extend `apps/search/tests/providers.test.ts` with restrictive response/result
-      notices, unreviewed policy, missing/invalid/oversized optional fields, unknown bounded notice
-      codes, and unexpected content fields. Assert fail-closed retention, explicit null/warning
-      handling, safe error redaction, and unknown source-content permissions without fetching source
-      pages.
-- [ ] T029 [P] [US4] Extend `apps/search/tests/search.test.ts` with provenance reads for shared
-      sources, original request observations after later searches, paginated source observations,
-      rejection counts, and historical provider-approval gating. Assert query/rank attribution,
-      explicit missing metadata, no fabricated publisher, no exposed raw URLs in rejection records,
-      and no bodies, claims, or inferred rights in storage/logs/output.
+- [ ] T028 [P] [US4] Audit `apps/search/tests/providers.test.ts` against the fixed metadata contract
+      for both providers. Reuse existing Exa notice, optional-field, content-filtering, approval,
+      and redaction checks; add only uncovered cases, including TMDB restrictive-notice handling.
+      Record coverage without duplicating tests or fetching source pages.
+- [ ] T029 [P] [US4] Verify in `apps/search/tests/search.test.ts` that later searches returning
+      changed metadata preserve the original request's observations. Reuse existing shared-source,
+      pagination, request-filtering, rejection-count, and historical approval checks. Add only
+      missing assertions for explicit nulls, absent raw rejected URLs, and no bodies, claims, or
+      inferred rights in storage/logs/output.
 
 ### Implementation
 
-- [ ] T030 [US4] Complete source-observation queries in `apps/search/src/search.ts` and expose their
-      routes in `apps/search/src/server.ts`, with optional request filtering. Return stable
-      identity, selected-work links, search origin/time/query/rank/notices, and bounded observations
-      joined to their internal attempts. Preserve original request observations and enforce provider
-      approval on every metadata read. Keep rejection counts and safe failure context in summaries;
-      dedicated attempt and rejection history endpoints remain deferred.
-- [ ] T031 [US4] Complete and verify the metadata edge cases in `apps/search/src/config.ts`,
-      `apps/search/src/providers/tmdb.ts`, and `apps/search/src/providers/exa.ts`: reject
-      restrictive provider notices, null invalid optional values with safe warnings, use fixed
-      metadata fields, and block calls/metadata reads without provider approval. No policy may
-      enable source text or synthesis. Run the US4 checks in `apps/search/tests/providers.test.ts`
-      and `apps/search/tests/search.test.ts` and record evidence in
-      `docs/specs/001-search/quickstart.md`.
+- [x] T030 [US4] Source-observation reads are covered by T020 and Phase 4 verification in
+      [quickstart.md](quickstart.md).
+- [ ] T031 [US4] Fix only metadata gaps exposed by T028-T029 in `apps/search/src/config.ts`,
+      `apps/search/src/providers/tmdb.ts`, `apps/search/src/providers/exa.ts`, or the owning
+      saved-read code. Preserve fixed fields, approval gates, safe warnings, and the ban on source
+      text and synthesis. Run the existing and added US4 checks in
+      `apps/search/tests/providers.test.ts` and `apps/search/tests/search.test.ts`; record evidence
+      in `docs/specs/001-search/quickstart.md`.
 
 **Checkpoint**: Every saved candidate is assessable with provenance and uncertainty intact. No
 source ingestion, extraction, or permission inference is introduced.
@@ -316,10 +311,10 @@ source ingestion, extraction, or permission inference is introduced.
       credentials, and recorded human relevance judgments. Version the corpus before running;
       missing judgments/evidence must not count as a pass, and ordinary tests must exclude this
       suite.
-- [ ] T033 [P] Reconcile `README.md` and `docs/specs/001-search/quickstart.md` with implemented
-      commands, endpoints, limits, startup/recovery behavior, and permission-policy setup. Add
-      operator credits with the approved TMDB logo and required attribution notice linked from
-      provider provenance. Keep credentials out of examples and retain distinct planned,
+- [ ] T033 [P] Reconcile `README.md`, `docs/roadmap.md`, and `docs/specs/001-search/quickstart.md`
+      with implemented commands, endpoints, limits, startup/recovery behavior, and permission-policy
+      setup. Add operator credits with the approved TMDB logo and required attribution notice linked
+      from provider provenance. Keep credentials out of examples and retain distinct planned,
       deterministic, and live evidence labels. Remove obsolete claims about nonexistent runtime
       components only after checking actual files.
 - [ ] T034 Run the complete deterministic suites in `apps/search/tests/search.test.ts`,
@@ -378,9 +373,10 @@ Setup T001-T002
   verifies the complete foundation.
 - Within each story, the two initial test tasks can run together. Implementation begins after both
   have defined the expected contracts. Run the story's checks before leaving its phase.
-- US2 is a real prerequisite for US1. US3 builds on search attempts and outcomes. US4 follows US3 so
-  its inspection can join source provenance to internal attempts and saved failure outcomes. Do not
-  claim story-level parallelism across their shared `search.ts`, `server.ts`, or test files.
+- US2 is a real prerequisite for US1. US3 builds on search attempts and outcomes. Remaining US4 work
+  follows US3 so its inspection can join source provenance to internal attempts and saved failure
+  outcomes. Do not claim story-level parallelism across their shared `search.ts`, `server.ts`, or
+  test files.
 - T032 and T033 can run together after all stories. T034 validates the final code/docs; T035
   establishes live permission evidence; T036 requires all earlier acceptance tasks.
 - Do not commit unrelated existing changes. The live corpus must be fixed in version control before
