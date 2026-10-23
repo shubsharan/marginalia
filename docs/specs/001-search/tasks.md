@@ -7,11 +7,15 @@
 [provider contract](contracts/providers.md), and [quickstart.md](quickstart.md). Follow
 `.specify/memory/constitution.md` version 3.0.0.
 
-**Status**: Phases 1 through 3 complete. On 2026-10-23, Bun 1.4.2 passed 82 tests and 408 assertions
-against sanitized fixtures, temporary databases, and loopback HTTP servers. US2 checks cover bounded
-TMDB resolution, explicit selection, atomic publication and freeze, identity reuse, candidate
-pagination, capacity limits, cancellation, attempt ownership, and saved selections after reopen. All
-43 foundational tests still pass. The owner-requested Hono, Zod, and neverthrow refactor also checks
+**Status**: Search is partially implemented through Phase 3. Simplification tasks T037-T040 are
+complete after Phase 3; Phases 4-7 remain planned. Current verification is recorded separately in
+[quickstart.md](quickstart.md).
+
+**Historical Phase 3 evidence**: On 2026-10-23, Bun 1.4.2 passed 82 tests and 408 assertions against
+sanitized fixtures, temporary databases, and loopback HTTP servers. US2 checks cover bounded TMDB
+resolution, explicit selection, atomic publication and freeze, identity reuse, candidate pagination,
+capacity limits, cancellation, attempt ownership, and saved selections after reopen. All 43
+foundational tests still pass. The owner-requested Hono, Zod, and neverthrow refactor also checks
 shared stream cancellation and UTF-8, safe schema errors, routing access controls, and selection
 rollback after a storage failure. Frozen dependency installation, app type-check, repository lint,
 formatting, and diff checks passed. Evidence applies to the uncommitted Phase 3 changes based on
@@ -66,7 +70,8 @@ extends the existing workspace. Scripts become runnable as their modules are imp
       from the app directory regardless of working directory; expose provider readiness without
       secrets, require a reviewed permission basis and fixed retained/displayed field allowlists for
       live provider work, and keep saved reads available when credentials are missing. Apply the
-      limits from `contracts/search-api.md` and `contracts/providers.md`.
+      limits from `contracts/search-api.md` and `contracts/providers.md`. Field-level policy is
+      superseded by the provider gate in T038.
 - [x] T004 [P] Define `apps/search/migrations/001_search.sql` from `data-model.md`: requests,
       ordered inputs, candidates, works, memberships, sources, search records, immutable
       observations, operations, attempts, rejections, and migration records. Include foreign keys,
@@ -144,7 +149,7 @@ execution.
       `apps/search/src/server.ts` to `apps/search/src/search.ts` with the exact response/status
       semantics in `contracts/search-api.md`. Add scoped cursor pagination for candidates and expose
       unresolved reasons, eligibility, provenance, coverage caps, and required actions; start the
-      resolution worker after readiness.
+      resolution worker after readiness. Candidate pagination is superseded by T037.
 - [x] T014 [US2] Run the US2 checks in `apps/search/tests/providers.test.ts` and
       `apps/search/tests/search.test.ts`; verify selection survives database reopen, unsafe
       selections leave all prior state unchanged, and final selection queues search exactly once.
@@ -175,15 +180,16 @@ references without provider calls. Live setup timing remains a separate acceptan
       `apps/search/tests/search.test.ts`: shared sources across works, aliases resolving to one
       membership, separate repeated requests, preserved query/rank/time observations, independent
       title-identical URLs, bounded complete pagination, and identical saved reads after database
-      reopen without credentials or network calls.
+      reopen without credentials or network calls, while retaining provider metadata approval.
 
 ### Implementation
 
 - [ ] T017 [US1] Implement Exa Search in `apps/search/src/providers/exa.ts` using injected fetch and
       the exact metadata-only request/response contract. Construct one query from each frozen work
-      selection, retain permitted metadata and notices only, validate and normalize public
-      HTTP/HTTPS source locations without fetching them, classify provider/response failures, and
-      expose returned/retained/rejected counts and limit indicators.
+      selection, require provider approval for the fixed metadata fields and retain safe notices
+      only, validate and normalize public HTTP/HTTPS source locations without fetching them,
+      classify provider/response failures, and expose returned/retained/rejected counts and limit
+      indicators.
 - [ ] T018 [US1] Implement atomic search publication in `apps/search/src/search.ts`: reuse
       normalized source identities, retain per-attempt observations and all request/work
       associations, save safe rejected-result reasons, and mark success only after all local writes
@@ -198,7 +204,8 @@ references without provider calls. Live setup timing remains a separate acceptan
       work/source detail reads in `apps/search/src/search.ts` and their routes in
       `apps/search/src/server.ts`. Use scoped snapshot/keyset pagination with 1-100 rows, reject
       malformed/mismatched cursors, include all work associations, and read only persisted records
-      with current display restrictions and explicit candidate/unknown-rights markers.
+      with current provider approval and explicit candidate/unknown-rights markers. Missing approval
+      blocks metadata reads; missing credentials do not. Use the fixed adapter metadata contract.
 - [ ] T021 [US1] Replace the starter instructions in `README.md` with actual install, configuration,
       permission-policy, stopped-server migration, startup, confirmation, and saved-read examples
       matching `docs/specs/001-search/quickstart.md`. Run the US1 provider/integration checks in
@@ -243,11 +250,11 @@ prove that retry preserves completed results and stale attempts cannot publish.
       expired running work as interrupted on reads, resume pending work, and require explicit retry
       for interrupted work. Honor provider retry times with no automatic retries and preserve
       attempt-ownership checks on every late success/failure write.
-- [ ] T026 [US3] Expose retry, operation listing, and attempt-history routes in
-      `apps/search/src/server.ts` using `apps/search/src/search.ts`, with bounded history, affected
-      input/work IDs, safe reasons, retry times, and actionable next steps. Match
-      `contracts/search-api.md` status codes and distinguish readable failed-operation records from
-      HTTP/storage failures.
+- [ ] T026 [US3] Expose retry in `apps/search/src/server.ts` using `apps/search/src/search.ts`. Keep
+      affected operation/input/work IDs, safe errors, counts, retry times, and next actions in
+      request summaries. Dedicated operation-list, attempt-history, and rejection-history endpoints
+      are deferred. Match `contracts/search-api.md` status codes; readable failures remain distinct
+      from HTTP/storage failures.
 - [ ] T027 [US3] Run `apps/search/tests/recovery.test.ts` and the retry/status cases in
       `apps/search/tests/search.test.ts`; record restart, stale-response, and selective-retry
       evidence in `docs/specs/001-search/quickstart.md`. Document the possible repeated provider
@@ -262,8 +269,9 @@ attempt can publish and no request remains permanently running after processing 
 relevance without implying content rights or established evidence.
 
 **Independent test**: Inspect a multi-work source and sources with missing/restricted metadata.
-Traverse observations, attempts, and rejections; remove a displayed field from policy and confirm
-historical reads suppress it while retaining safe identities, counts, and status.
+Traverse source observations and inspect summary failures and rejection counts. Withdraw provider
+approval and confirm metadata reads fail with 503 while local inputs, selections, IDs, counts, and
+status remain readable.
 
 ### Tests
 
@@ -273,24 +281,26 @@ historical reads suppress it while retaining safe identities, counts, and status
       handling, safe error redaction, and unknown source-content permissions without fetching source
       pages.
 - [ ] T029 [P] [US4] Extend `apps/search/tests/search.test.ts` with provenance reads for shared
-      sources, original request observations after later searches, paginated rejection/observation
-      history, and historical display-policy suppression. Assert query/rank attribution, explicit
-      missing/restricted fields, no fabricated publisher, no exposed raw URLs in rejection records,
+      sources, original request observations after later searches, paginated source observations,
+      rejection counts, and historical provider-approval gating. Assert query/rank attribution,
+      explicit missing metadata, no fabricated publisher, no exposed raw URLs in rejection records,
       and no bodies, claims, or inferred rights in storage/logs/output.
 
 ### Implementation
 
-- [ ] T030 [US4] Complete observation and rejection queries in `apps/search/src/search.ts` and
-      expose their routes in `apps/search/src/server.ts`, including source observations with
-      optional request filtering. Return stable identity, selected-work links, search
-      origin/time/query/rank/notices, safe rejection counts/reasons, and bounded history; preserve
-      original request observations and enforce current display allowlists on every historical read.
+- [ ] T030 [US4] Complete source-observation queries in `apps/search/src/search.ts` and expose their
+      routes in `apps/search/src/server.ts`, with optional request filtering. Return stable
+      identity, selected-work links, search origin/time/query/rank/notices, and bounded observations
+      joined to their internal attempts. Preserve original request observations and enforce provider
+      approval on every metadata read. Keep rejection counts and safe failure context in summaries;
+      dedicated attempt and rejection history endpoints remain deferred.
 - [ ] T031 [US4] Complete and verify the metadata edge cases in `apps/search/src/config.ts`,
       `apps/search/src/providers/tmdb.ts`, and `apps/search/src/providers/exa.ts`: reject
-      restrictive retained metadata, null invalid optional values with safe warnings, preserve
-      restriction indicators, and prevent policy from enabling source text or synthesis. Run the US4
-      checks in `apps/search/tests/providers.test.ts` and `apps/search/tests/search.test.ts` and
-      record evidence in `docs/specs/001-search/quickstart.md`.
+      restrictive provider notices, null invalid optional values with safe warnings, use fixed
+      metadata fields, and block calls/metadata reads without provider approval. No policy may
+      enable source text or synthesis. Run the US4 checks in `apps/search/tests/providers.test.ts`
+      and `apps/search/tests/search.test.ts` and record evidence in
+      `docs/specs/001-search/quickstart.md`.
 
 **Checkpoint**: Every saved candidate is assessable with provenance and uncertainty intact. No
 source ingestion, extraction, or permission inference is introduced.
@@ -317,11 +327,11 @@ source ingestion, extraction, or permission inference is introduced.
       `check-types`, repository lint, and formatting checks. Fix failures in their owning files,
       verify no accidental production dependencies or unrequested features, and record
       commands/results/revision in `docs/specs/001-search/quickstart.md`.
-- [ ] T035 Verify actual provider retention/display permission bases and record approved fields,
-      references, and review dates in `apps/search/metadata-policy.json` before any live retention.
-      If account permission evidence is unavailable, leave the affected provider disabled and record
-      the exact blocker in `docs/specs/001-search/quickstart.md`; fixtures are not permission
-      evidence.
+- [ ] T035 Verify actual provider retention/display permission for the complete fixed metadata
+      contract and record references, revision, and review dates in
+      `apps/search/metadata-policy.json` before any live retention. If account permission evidence
+      is unavailable, leave the affected provider disabled and record the exact blocker in
+      `docs/specs/001-search/quickstart.md`; fixtures are not permission evidence.
 - [ ] T036 Execute fresh-checkout setup and the live workflow in
       `docs/specs/001-search/quickstart.md` after T032-T035, using
       `apps/search/tests/live-acceptance.test.ts` and the unchanged versioned corpus. Record setup
@@ -333,18 +343,35 @@ source ingestion, extraction, or permission inference is introduced.
 **Checkpoint**: Full completion requires all four stories and acceptance evidence. Fixture passes
 cannot establish live relevance, account permissions, or the 30-minute fresh-checkout target.
 
+## Simplification after Phase 3
+
+This pass changes the current code and future contracts only. Existing Phase 3 evidence remains
+historical; Exa execution, source reads, retry/recovery, live review, and acceptance stay unchecked.
+
+- [x] T037 Return the current attempt's at most 20 candidates in ordinal order, without pagination.
+      Reject query parameters through `noQuery`; preserve internal history and selection ownership.
+- [x] T038 Replace configurable field lists with provider approval for the fixed metadata contract.
+      Gate calls and saved metadata reads, reject legacy policies, and keep local status readable.
+- [x] T039 Define the greenfield schema in the single initial migration without limits snapshots.
+      Remove the duplicated schema inventory, retaining compatibility, integrity, and transactions.
+- [x] T040 Update tests, fixtures, feature docs, and future tasks. Verify fresh initialization and
+      migration rollback, current candidates, provider gating, app tests/type-check, lint, format,
+      and diff. Record fresh evidence separately; do not implement or claim later-phase acceptance.
+
 ## Dependencies and execution order
 
 ```text
 Setup T001-T002
   -> Foundation T003-T007
   -> US2 T008-T014
+  -> Simplification T037-T040
   -> US1 T015-T021
   -> US3 T022-T027
   -> US4 T028-T031
   -> Acceptance T032-T036
 ```
 
+- The simplification pass follows Phase 3 and does not authorize later-phase implementation.
 - Phase barriers are mandatory. Within each phase, follow task order except the explicitly
   independent groups below. Every task depends on the prior phase checkpoint.
 - T003 and T004 can run together; T005 requires both. T006 follows storage/configuration, and T007
@@ -352,8 +379,8 @@ Setup T001-T002
 - Within each story, the two initial test tasks can run together. Implementation begins after both
   have defined the expected contracts. Run the story's checks before leaving its phase.
 - US2 is a real prerequisite for US1. US3 builds on search attempts and outcomes. US4 follows US3 so
-  its inspection can link to complete attempt/failure history. Do not claim story-level parallelism
-  across their shared `search.ts`, `server.ts`, or test files.
+  its inspection can join source provenance to internal attempts and saved failure outcomes. Do not
+  claim story-level parallelism across their shared `search.ts`, `server.ts`, or test files.
 - T032 and T033 can run together after all stories. T034 validates the final code/docs; T035
   establishes live permission evidence; T036 requires all earlier acceptance tasks.
 - Do not commit unrelated existing changes. The live corpus must be fixed in version control before
@@ -376,22 +403,22 @@ These are scheduling examples, not commands to spawn agents automatically.
 
 ## Requirement coverage
 
-| Requirements     | Primary tasks                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------ |
-| FR-001 to FR-004 | T008-T014: bounded input, stable identity, explicit selection, atomic freeze                     |
-| FR-005 to FR-007 | T015-T020: selected-work search, metadata/provenance, identity reuse                             |
-| FR-008           | T013, T020-T021, T026, T030: complete developer interface and saved reads                        |
-| FR-009 to FR-010 | T022-T027: coverage/status, failure reasons, retries and restart                                 |
-| FR-011           | T004-T005, T011-T012, T018-T020, T022-T027: durable records and outcomes                         |
-| FR-012           | T001-T007, T021, T033-T036: configuration, migrations and local setup                            |
-| FR-013           | T003, T008-T020, T023-T026, T030: finite limits and complete bounded reads                       |
-| FR-014 to FR-016 | T002-T003, T006-T010, T015-T017, T028-T031, T035: metadata rights, safe local access and secrets |
-| SC-001           | T021, T033, T036: timed fresh-checkout three-title workflow                                      |
-| SC-002           | T032, T035-T036: fixed ten-work live corpus and recorded relevance judgments                     |
-| SC-003           | T008-T014, T015-T019: unresolved inputs cannot trigger unconfirmed/expanded search               |
-| SC-004           | T016, T018-T020, T022-T027: stable references, deduplication and recovery                        |
-| SC-005           | T022-T027, T030: inspectable coverage and selective retry                                        |
-| SC-006           | T015-T020, T028-T031, T034-T036: provenance and metadata-only evidence                           |
+| Requirements     | Primary tasks                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| FR-001 to FR-004 | T008-T014, T037, T040: bounded input, stable identity, explicit selection, atomic freeze                     |
+| FR-005 to FR-007 | T015-T020: selected-work search, metadata/provenance, identity reuse                                         |
+| FR-008           | T013, T020-T021, T026, T030: complete developer interface and saved reads                                    |
+| FR-009 to FR-010 | T022-T027: coverage/status, failure reasons, retries and restart                                             |
+| FR-011           | T004-T005, T011-T012, T018-T020, T022-T027: durable records and outcomes                                     |
+| FR-012           | T001-T007, T021, T033-T036, T039-T040: configuration, migrations and local setup                             |
+| FR-013           | T003, T008-T020, T023-T026, T030: finite limits and complete bounded reads                                   |
+| FR-014 to FR-016 | T002-T003, T006-T010, T015-T017, T028-T031, T035, T038, T040: metadata rights, safe local access and secrets |
+| SC-001           | T021, T033, T036: timed fresh-checkout three-title workflow                                                  |
+| SC-002           | T032, T035-T036: fixed ten-work live corpus and recorded relevance judgments                                 |
+| SC-003           | T008-T014, T015-T019: unresolved inputs cannot trigger unconfirmed/expanded search                           |
+| SC-004           | T016, T018-T020, T022-T027: stable references, deduplication and recovery                                    |
+| SC-005           | T022-T027, T030: inspectable coverage and selective retry                                                    |
+| SC-006           | T015-T020, T028-T031, T034-T036: provenance and metadata-only evidence                                       |
 
 ## Implementation strategy
 

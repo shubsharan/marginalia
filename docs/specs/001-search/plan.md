@@ -7,7 +7,8 @@
 Status: Tasks T001-T014 are implemented through Phase 3. TMDB resolution and explicit selection are
 available; Exa execution and the remaining stories stay planned. Search operations remain pending
 after selection until Phase 4. Spec Kit reports logical branch `001-search`; the actual Git branch
-includes `feat-`.
+includes `feat-`. The simplification pass T037-T040 changes current-candidate reads, provider
+approval, and storage configuration only; it does not implement later Search phases.
 
 ## Summary
 
@@ -56,14 +57,14 @@ behavior remain implementation acceptance prerequisites.
 
 Constitution version 3.0.0. Every gate passed before research and after design.
 
-| Principle                               | Pre-research requirement                        | Post-design evidence                                                                              |
-| --------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| I. Preserve meaning and context         | Stable identities and original mappings         | Namespaced TMDB IDs/local UUIDs and source URLs, frozen selections, per-attempt observations      |
-| II. Evidence with room for disagreement | Search cannot become a claim                    | Unverified candidates, nullable fields, attributed rank and query                                 |
-| III. Respect rights and privacy         | Metadata permission differs from content rights | Reviewed metadata allowlist, no content requests/raw payload storage, unknown source rights       |
-| IV. Safe and accountable participation  | No publishing or public participation here      | Loopback JSON API with host/origin checks; contribution controls stay with their owning feature   |
-| V. Build for an identified user need    | Complete roadmap feature 1 only                 | One application/database supports submit, select, inspect, retry, and restart                     |
-| Verification and document ownership     | Planned behavior must be labeled                | Proposed commands and checks are explicit; product/architecture/roadmap/spec boundaries preserved |
+| Principle                               | Pre-research requirement                        | Post-design evidence                                                                                          |
+| --------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| I. Preserve meaning and context         | Stable identities and original mappings         | Namespaced TMDB IDs/local UUIDs and source URLs, frozen selections, per-attempt observations                  |
+| II. Evidence with room for disagreement | Search cannot become a claim                    | Unverified candidates, nullable fields, attributed rank and query                                             |
+| III. Respect rights and privacy         | Metadata permission differs from content rights | Fixed metadata contract and provider approval, no content requests/raw payload storage, unknown source rights |
+| IV. Safe and accountable participation  | No publishing or public participation here      | Loopback JSON API with host/origin checks; contribution controls stay with their owning feature               |
+| V. Build for an identified user need    | Complete roadmap feature 1 only                 | One application/database supports submit, select, inspect, retry, and restart                                 |
+| Verification and document ownership     | Planned behavior must be labeled                | Proposed commands and checks are explicit; product/architecture/roadmap/spec boundaries preserved             |
 
 No constitutional exceptions or amendments are needed.
 
@@ -134,11 +135,20 @@ database module owns migrations and transactions. Provider modules validate exte
 repository/service class layers are needed.
 
 Hono owns route matching and shared access middleware. Zod validates submissions, selections,
-pagination, policy, and provider metadata without exposing raw validation errors. A shared bounded
-JSON reader enforces byte limits and strict UTF-8 for both HTTP and provider bodies. Provider
-adapters return neverthrow results for expected failures; SQLite transaction callbacks still throw
-on failure so rollback occurs before HTTP error handling. Candidate parsing stays in the provider
-module. Request summaries join selected work IDs and derive status through ordered rules.
+planned growing-list pagination, provider approval, and metadata without exposing raw validation
+errors. A shared bounded JSON reader enforces byte limits and strict UTF-8 for both HTTP and
+provider bodies. Provider adapters return neverthrow results for expected failures; SQLite
+transaction callbacks still throw on failure so rollback occurs before HTTP error handling.
+Candidate parsing stays in the provider module. Request summaries join selected work IDs and derive
+status through ordered rules.
+
+Candidate reads return the current attempt's at most 20 candidates without cursors. Provider
+approval gates calls and metadata reads as a whole; fixed adapters replace field-level policy
+branches. The single initial schema omits the limits snapshot. This greenfield project does not need
+a compatibility migration for earlier experimental schemas. Startup retains compatibility and SQLite
+integrity checks without a duplicated schema inventory. Internal limits remain implementation
+defaults. Dedicated operation, attempt, and rejection history endpoints are deferred; summaries and
+source observations provide the required failure and provenance context.
 
 Implementation must also update workspace development dependencies and the Bun lockfile, replace the
 starter README with actual setup, ignore database/WAL/SHM files, and add app scripts for `dev`,
@@ -146,8 +156,9 @@ starter README with actual setup, ignore database/WAL/SHM files, and add app scr
 TypeScript config, formatter, and linter. Direct app commands suffice; this plan requires no
 Turborepo changes.
 
-Add sanitized fixtures and a predeclared live corpus/relevance rubric. Planning preserves existing
-dirty changes to the roadmap, specification, and requirements checklist and makes no commit.
+Existing sanitized TMDB fixtures cover resolution. Exa fixtures and the predeclared live
+corpus/relevance rubric remain future work. Preserve unrelated working-tree changes. This
+simplification adds no dependencies, public hosting, UI, or additional Search phases.
 
 ## Validation coverage
 

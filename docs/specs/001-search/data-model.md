@@ -1,14 +1,14 @@
 # Search data model
 
-Planned SQLite model for [the specification](spec.md). Local records have UUIDs and UTC timestamps.
-Foreign keys are enabled. Provider observations and selection snapshots retain their original
-values.
+SQLite model for [the specification](spec.md). The schema exists; Exa publication, source reads,
+retry, and crash recovery remain planned. Local records have UUIDs and UTC timestamps. Foreign keys
+are enabled. Provider observations and selection snapshots retain their original values.
 
 ## Records and constraints
 
 | Record                  | Fields and constraints                                                                                                                                                                                                                                                             |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_requests`       | ID, created time, nullable work-set freeze time, validated versioned limits snapshot.                                                                                                                                                                                              |
+| `search_requests`       | ID, created time, nullable work-set freeze time. Internal limits are not saved per request.                                                                                                                                                                                        |
 | `title_inputs`          | ID, request ID, position, original title, normalized search title, optional year/type, resolution state, nullable selected candidate ID and selection time. Unique request/position.                                                                                               |
 | `resolution_candidates` | ID, input ID, attempt ID, ordinal, provider, provider media type, provider ID, title, original title, application type, release/first-air date, original language, available origin countries, retrieval time, eligibility/reason. Unique attempt/provider/media-type/provider-ID. |
 | `works`                 | Local UUID, provider, provider media type, provider ID, first-selected title/type/details, identity URL, retrieval time, created time. Unique provider/media-type/provider-ID.                                                                                                     |
@@ -21,9 +21,9 @@ values.
 | `rejected_results`      | ID, attempt ID, ordinal, safe reason code. No raw URL or provider payload.                                                                                                                                                                                                         |
 | `schema_migrations`     | Applied version, checksum, applied time. Migration and version insertion commit together.                                                                                                                                                                                          |
 
-Use bounded JSON for candidate metadata arrays and validated limits. Memberships, identity, state,
-and associations remain relational. Unique constraints enforce deduplication. A source can have
-multiple observations and work associations while retaining one identity.
+Use bounded JSON for candidate metadata arrays and query context. Memberships, identity, state, and
+associations remain relational. Unique constraints enforce deduplication. A source can have multiple
+observations and work associations while retaining one identity.
 
 ## Identity and metadata
 
@@ -44,15 +44,20 @@ canonical tags, follow redirects, or merge matching titles. This feature never f
 Missing optional metadata is null. A hostname is not a publisher. Query and rank are attributed,
 unverified relevance, never confidence. Request reads use that request's observations rather than
 metadata from later requests. Source detail exposes identity and paginated observations with origin.
-The current provider metadata allowlist applies to historical reads. Suppressed fields have an
-explicit restriction indicator. Safe IDs, counts, and status stay inspectable without provider
-calls.
+Adapters retain and expose fixed metadata fields from the provider contract. Current provider
+approval gates every metadata read, including historical reads; missing approval returns
+`503 metadata_policy_missing`. Credentials are not needed for saved reads. Local IDs, inputs,
+selections, counts, and status remain inspectable without approval or provider calls.
 
 ## Resolution and selections
 
 Resolution moves from `pending` to `running`, then `needs_selection`, `unresolved`, `failed`, or
 `interrupted`. Publish candidates only after every required TMDB search succeeds. Failure of one
 endpoint for an untyped input cannot become a successful singleton result from the other endpoint.
+
+Candidate inspection returns only the current attempt's saved candidates, ordered by ordinal and
+capped at 20. An attempt without published candidates returns an empty list. Historical candidates
+remain internal records, and selection rejects candidates from superseded attempts.
 
 Eligible candidates require confirmation, including singletons. Selection sets `resolved`. Decline
 sets `unresolved` with reason `declined`. No eligible candidate yields `no_match`,
@@ -68,8 +73,10 @@ memberships and queues one search operation per distinct work. Subsequent select
 
 Operations use `pending`, `running`, `succeeded`, `failed`, and `interrupted`. Claiming pending work
 atomically creates an attempt and installs its ID as current. External calls occur outside write
-transactions. Each attempt expires after 60 seconds; each call times out after 15 seconds including
-response consumption. Resolution makes at most two calls; search makes one.
+transactions. Timeout and scheduling defaults live in `src/config.ts`; resolution makes at most two
+calls and search makes one. Attempts, recovery, and retry retain their ownership checks. Dedicated
+operation-list, attempt-history, and rejection-history endpoints are deferred; summaries expose
+affected operation IDs, current failures, counts, retry times, and guidance.
 
 Publishing results or failure checks current attempt ID, running state, and unexpired deadline in
 the same transaction. Late responses cannot change results. A once-per-second sweep and startup
@@ -105,8 +112,13 @@ recovery, and retry. Index input order, operation state/deadline, request member
 and source observations. Use monotonic internal sequence IDs for keyset pagination alongside public
 UUIDs. Capture the maximum sequence in the first-page cursor so later inserts do not shift
 traversal. A fresh traversal includes newly committed rows. Pagination is bounded but can reach
-every saved row.
+every saved source observation and other growing result collection. Candidate lists are bounded per
+current attempt and do not use pagination.
 
 Apply migrations before readiness. Roll back a failed migration without changing existing data or
 the schema version. Reject changed applied checksums and unknown newer schemas. Keep
-database/WAL/SHM files together on local disk. Run explicit migrations with the server stopped.
+database/WAL/SHM files together on local disk. Run explicit migrations with the server stopped. The
+single initial migration defines the current schema without request limits snapshots. Use a fresh
+database for this greenfield schema; earlier experimental schemas have no upgrade path. Startup
+checks migration compatibility and SQLite integrity, without maintaining a second column/trigger
+inventory.

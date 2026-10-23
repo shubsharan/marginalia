@@ -39,7 +39,10 @@
   ambiguity and selection. Story 3 covers failures and retries. Story 4 covers provenance and the
   search boundary. Edge Cases cover validation, identity reuse, limits, and configuration errors.
 - SC-001 through SC-006 define verification targets. Checked items mean the specification is ready
-  for planning; implementation and runtime acceptance tests have not run.
+  for planning, not full delivery. Phase 3 resolution/selection tests and the simplification checks
+  have run; full Search acceptance remains NOT RUN. See the quickstart for separate evidence.
 - Assumptions state the initial series-level television scope, trusted local caller, and requirement
-  to resolve all titles before search. Technology and provider choices remain for planning.
+  to confirm all titles before search. The simplification preserves that behavior, makes current
+  candidates directly inspectable, and applies provider approval to collection and saved metadata
+  display. Local IDs, inputs, selections, and status remain readable without approval.
 - Items marked incomplete require spec updates before `$speckit-clarify` or `$speckit-plan`.

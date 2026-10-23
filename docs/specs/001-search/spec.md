@@ -4,7 +4,8 @@
 
 **Created**: 2026-10-22
 
-**Status**: Draft
+**Status**: Partially implemented through Phase 3; remaining stories and full acceptance are
+planned.
 
 **Input**: User description: "docs/roadmap.md #1, Search"
 
@@ -175,18 +176,22 @@ metadata. Verify usable locations, search provenance, and explicit missing infor
   become resumable or retryable after restart.
 - **FR-011**: The system MUST persist requests, resolution choices, work and source identities,
   associations, search provenance, and operation outcomes. Saved results MUST remain inspectable
-  without contacting external services again.
+  without contacting external services again, subject to current metadata approval.
 - **FR-012**: Local setup MUST document prerequisites, required configuration, storage
   initialization and upgrades, startup, and example submission and inspection. Missing configuration
   and failed storage initialization or upgrades MUST fail visibly without reporting readiness or
   discarding existing saved results.
 - **FR-013**: Search and inspection MUST have documented finite limits. Callers MUST be able to
-  identify when search reached a limit and read all saved results in bounded portions. Failures MUST
-  NOT be converted into successful empty searches.
+  identify when search reached a limit and inspect the current resolution candidates in one bounded
+  response. Growing collections of saved results MUST remain fully traversable in bounded portions.
+  Internal attempt history need not have a dedicated inspection interface. Failures MUST NOT be
+  converted into successful empty searches.
 - **FR-014**: This feature MUST retain and expose only search metadata permitted for those uses. It
   MUST NOT fetch or retain source bodies, request full source content during search, or extract
   claims. Search and attribution MUST NOT imply permission to process, quote, or republish a source.
-  Unknown permissions MUST remain unknown for later ingestion assessment.
+  Unknown permissions MUST remain unknown for later ingestion assessment. Missing or invalid
+  provider metadata approval MUST block both collection and display of that provider's metadata,
+  including saved metadata, while local inputs, selections, and status remain inspectable.
 - **FR-015**: Results MUST distinguish source candidates and unverified relevance information from
   established evidence. Missing metadata MUST NOT be invented. Results rejected for unusable source
   locations MUST be visible in the search outcome.
@@ -197,7 +202,8 @@ metadata. Verify usable locations, search provenance, and explicit missing infor
 ### Key Entities _(include if feature involves data)_
 
 - **Search request**: One caller-selected collection, its original inputs, fixed resolved work set,
-  limits, progress, and saved results.
+  progress and saved results. Search parameters and provenance explain the results; internal
+  configuration is not part of the request record.
 - **Title input and resolution**: Supplied title and optional details, candidate matches, unresolved
   status or chosen work, and the basis for resolution.
 - **Work**: A stable film or television identity with distinguishing metadata and identity

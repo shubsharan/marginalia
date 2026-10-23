@@ -24,20 +24,6 @@ const selectionSchema = z.strictObject({
     .max(LIMITS.maxInputs)
     .refine((choices) => new Set(choices.map((c) => c.inputId)).size === choices.length),
 });
-const paginationSchema = z.strictObject({
-  limit: z
-    .string()
-    .regex(/^[1-9]\d*$/)
-    .transform(Number)
-    .pipe(z.int().min(1).max(LIMITS.maxPageSize))
-    .default(LIMITS.defaultPageSize),
-  cursor: z
-    .string()
-    .regex(/^[A-Za-z0-9_-]+$/)
-    .max(2048)
-    .optional(),
-});
-
 type InputRow = {
   id: string;
   request_id: string;
@@ -75,7 +61,6 @@ type RequestRow = {
   id: string;
   created_at: string;
   frozen_at: string | null;
-  limits_snapshot: string;
 };
 type OperationState = "pending" | "running" | "succeeded" | "failed" | "interrupted";
 
@@ -102,10 +87,7 @@ export function submitRequest(db: Database, body: unknown) {
     .transaction(() => {
       capacity(db);
       const requestId = crypto.randomUUID();
-      db.run("INSERT INTO search_requests (id, limits_snapshot) VALUES (?, ?)", [
-        requestId,
-        JSON.stringify(LIMITS),
-      ]);
+      db.run("INSERT INTO search_requests (id) VALUES (?)", [requestId]);
       for (const [position, input] of inputs.entries()) {
         const inputId = crypto.randomUUID();
         db.run(
@@ -240,7 +222,6 @@ export function requestSummary(db: Database, id: string) {
     createdAt: request.created_at,
     frozenAt: request.frozen_at,
     status,
-    limits: JSON.parse(request.limits_snapshot),
     coverageBounded: true,
     operationCounts: counts,
     distinctWorkCount:
@@ -475,98 +456,40 @@ export function publishResolution(
     .immediate();
 }
 
-export function listCandidates(
-  db: Database,
-  config: Config,
-  requestId: string,
-  inputId: string,
-  params: URLSearchParams,
-) {
+export function listCandidates(db: Database, config: Config, requestId: string, inputId: string) {
   requestRow(db, requestId);
   if (
     !db.query("SELECT 1 FROM title_inputs WHERE id = ? AND request_id = ?").get(inputId, requestId)
   )
     throw new RequestError(404, "not_found", "The input was not found in this request.");
-  const invalidCursor = () =>
-    new RequestError(400, "invalid_pagination", "Invalid pagination query or cursor.");
-  if ([...params.keys()].length !== new Set(params.keys()).size) throw invalidCursor();
-  const pagination = paginationSchema.safeParse(Object.fromEntries(params));
-  if (!pagination.success) throw invalidCursor();
-  const { limit, cursor } = pagination.data;
-  const scope = `/v1/search-requests/${requestId}/inputs/${inputId}/candidates`;
-  let max =
-    db
-      .query<{ seq: number }, [string]>(
-        "SELECT coalesce(max(seq), 0) seq FROM resolution_candidates WHERE input_id = ?",
-      )
-      .get(inputId)?.seq ?? 0;
-  let last = 0;
-  let snapshotAt = new Date().toISOString();
-  if (cursor !== undefined) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-    } catch {
-      throw invalidCursor();
-    }
-    const decoded = z
-      .strictObject({
-        scope: z.literal(scope),
-        max: z.int().min(0).max(max),
-        last: z.int().min(0),
-        snapshotAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
-      })
-      .refine((value) => value.last <= value.max)
-      .safeParse(parsed);
-    if (!decoded.success) throw invalidCursor();
-    ({ max, last, snapshotAt } = decoded.data);
-  }
+  if (!config.providers.tmdb.policy)
+    throw new RequestError(503, "metadata_policy_missing", "Review the TMDB metadata policy.");
   const rows = db
-    .query<CandidateRow, [string, number, number, number]>(
-      "SELECT * FROM resolution_candidates WHERE input_id = ? AND seq > ? AND seq <= ? ORDER BY seq LIMIT ?",
-    )
-    .all(inputId, last, max, limit + 1);
-  const items = rows.slice(0, limit).map((row) => {
-    const displayed = config.providers.tmdb.policy?.displayedFields ?? [];
-    const restrictedFields: string[] = [];
-    function display<T>(field: string, value: T): T | null {
-      if (displayed.includes(field)) return value;
-      restrictedFields.push(field);
-      return null;
-    }
-    const movie = row.provider_media_type === "movie";
-    const providerId = display("id", row.provider_id);
-    return {
-      id: row.id,
-      inputId: row.input_id,
-      attemptId: row.attempt_id,
-      ordinal: row.ordinal,
-      provider: row.provider,
-      providerMediaType: row.provider_media_type,
-      providerId,
-      identityUrl:
-        providerId === null
-          ? null
-          : `https://www.themoviedb.org/${row.provider_media_type}/${providerId}`,
-      title: display(movie ? "title" : "name", row.title),
-      originalTitle: display(movie ? "original_title" : "original_name", row.original_title),
-      workType: row.work_type,
-      releaseDate: display(movie ? "release_date" : "first_air_date", row.release_date),
-      originalLanguage: display("original_language", row.original_language),
-      originCountries: movie
-        ? null
-        : display(
-            "origin_country",
-            row.origin_countries === null ? null : JSON.parse(row.origin_countries),
-          ),
-      retrievedAt: row.retrieved_at,
-      eligible: Boolean(row.eligible),
-      ineligibleReason: row.ineligible_reason,
-      warningCodes: JSON.parse(row.warning_codes),
-      restrictedFields,
-    };
-  });
-  const tail = rows[Math.min(limit, rows.length) - 1];
+    .query<CandidateRow, [string, number]>(`
+      SELECT c.* FROM resolution_candidates c JOIN operations o ON o.current_attempt_id = c.attempt_id
+      WHERE o.input_id = ? AND c.input_id = o.input_id ORDER BY c.ordinal LIMIT ?
+    `)
+    .all(inputId, LIMITS.maxCandidates);
+  const items = rows.map((row) => ({
+    id: row.id,
+    inputId: row.input_id,
+    attemptId: row.attempt_id,
+    ordinal: row.ordinal,
+    provider: row.provider,
+    providerMediaType: row.provider_media_type,
+    providerId: row.provider_id,
+    identityUrl: `https://www.themoviedb.org/${row.provider_media_type}/${row.provider_id}`,
+    title: row.title,
+    originalTitle: row.original_title,
+    workType: row.work_type,
+    releaseDate: row.release_date,
+    originalLanguage: row.original_language,
+    originCountries: row.origin_countries === null ? null : JSON.parse(row.origin_countries),
+    retrievedAt: row.retrieved_at,
+    eligible: Boolean(row.eligible),
+    ineligibleReason: row.ineligible_reason,
+    warningCodes: JSON.parse(row.warning_codes),
+  }));
   const operation = db
     .query<
       {
@@ -582,13 +505,6 @@ export function listCandidates(
     .get(inputId);
   return {
     items,
-    nextCursor:
-      rows.length > limit && tail
-        ? Buffer.from(JSON.stringify({ scope, max, last: tail.seq, snapshotAt })).toString(
-            "base64url",
-          )
-        : null,
-    snapshotAt,
     coverageBounded: true,
     limitFlags: JSON.parse(operation?.limit_flags ?? "[]"),
     returnedCount: operation?.returned_count ?? 0,

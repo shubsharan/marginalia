@@ -120,16 +120,8 @@ export function startServer({
   app.post("/v1/search-requests/:id/selections", noQuery, (c) =>
     json(selectCandidates(db, c.req.param("id"), c.get("body"))),
   );
-  app.get("/v1/search-requests/:id/inputs/:inputId/candidates", (c) =>
-    json(
-      listCandidates(
-        db,
-        config,
-        c.req.param("id"),
-        c.req.param("inputId"),
-        new URL(c.req.url).searchParams,
-      ),
-    ),
+  app.get("/v1/search-requests/:id/inputs/:inputId/candidates", noQuery, (c) =>
+    json(listCandidates(db, config, c.req.param("id"), c.req.param("inputId"))),
   );
   return Bun.serve<undefined>({
     hostname: "127.0.0.1",

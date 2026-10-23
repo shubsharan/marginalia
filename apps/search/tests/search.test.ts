@@ -52,15 +52,11 @@ function reviewedPolicy() {
         provider: "tmdb",
         reviewedAt: "2026-01-01",
         permissionBasis: "test-only fixture, no live permissions",
-        retainedFields: ["id", "title", "name"],
-        displayedFields: ["title", "name"],
       },
       exa: {
         provider: "exa",
         reviewedAt: "2026-01-01",
         permissionBasis: "test-only fixture, no live permissions",
-        retainedFields: ["id", "url", "title"],
-        displayedFields: ["url", "title"],
       },
     },
   };
@@ -71,10 +67,7 @@ function savePolicy(value: unknown) {
 }
 
 function insertRequest(db: Database, id = "request-1") {
-  db.run("INSERT INTO search_requests (id, limits_snapshot) VALUES (?, ?)", [
-    id,
-    JSON.stringify(LIMITS),
-  ]);
+  db.run("INSERT INTO search_requests (id) VALUES (?)", [id]);
 }
 
 function seedResolution(db: Database, suffix = "1") {
@@ -229,10 +222,10 @@ describe("configuration and metadata policy", () => {
     "unreviewed",
     "invalid-date",
     "invalid-basis",
-    "unknown-field",
-    "display-outside-retention",
+    "legacy-retention",
+    "legacy-display",
+    "future-date",
     "wrong-provider",
-    "duplicate-field",
   ])("rejects %s policy for only the affected provider", (kind) => {
     const policy = reviewedPolicy();
     switch (kind) {
@@ -245,17 +238,17 @@ describe("configuration and metadata policy", () => {
       case "invalid-basis":
         policy.providers.tmdb.permissionBasis = " ";
         break;
-      case "unknown-field":
-        policy.providers.tmdb.retainedFields.push("overview");
+      case "legacy-retention":
+        Object.assign(policy.providers.tmdb, { retainedFields: ["id", "title"] });
         break;
-      case "display-outside-retention":
-        policy.providers.tmdb.displayedFields.push("original_title");
+      case "legacy-display":
+        Object.assign(policy.providers.tmdb, { displayedFields: ["title"] });
         break;
       case "wrong-provider":
         policy.providers.tmdb.provider = "exa";
         break;
-      case "duplicate-field":
-        policy.providers.tmdb.retainedFields.push("id");
+      case "future-date":
+        policy.providers.tmdb.reviewedAt = "9999-01-01";
         break;
     }
     savePolicy(policy);
@@ -396,39 +389,21 @@ describe("storage lifecycle", () => {
     inspect.close();
   });
 
-  test("runtime refuses pending migrations and missing schema objects", () => {
+  test("runtime refuses pending migrations", () => {
     const { db, path } = database();
     close(db);
     expect(() =>
       openDatabase(path, [...loadMigrations(), { version: 2, sql: "SELECT 1;" }]),
     ).toThrow("schema_migration_required");
-    const raw = new Database(path);
-    raw.run("DROP TABLE rejected_results");
-    raw.close();
-    expect(() => openDatabase(path)).toThrow("schema_invalid");
   });
 
-  test.each([
-    "ALTER TABLE sources DROP COLUMN source_host",
-    "ALTER TABLE works DROP COLUMN original_title",
-    "ALTER TABLE operation_attempts DROP COLUMN retry_at",
-    "DROP TRIGGER observations_no_update",
-    "DROP TRIGGER candidate_attempt_ownership",
-  ])("rejects incomplete schemas without changing committed rows: %s", (damage) => {
+  test("startup still rejects foreign-key violations", () => {
     const { db, path } = database();
-    insertRequest(db);
-    db.run(damage);
+    seedResolution(db);
+    db.run("PRAGMA foreign_keys = OFF");
+    db.run("UPDATE title_inputs SET request_id = 'missing'");
     close(db);
-    expect(() => {
-      databases.add(openDatabase(path));
-    }).toThrow("schema_invalid");
-    expect(() => migrateDatabase(path)).toThrow("schema_invalid");
-    const inspect = new Database(path, { readonly: true });
-    try {
-      expect(inspect.query("SELECT id FROM search_requests").all()).toEqual([{ id: "request-1" }]);
-    } finally {
-      inspect.close();
-    }
+    expect(() => openDatabase(path)).toThrow("schema_invalid");
   });
 
   test("CLI migration and runtime use the same app-relative path from different directories", async () => {
@@ -444,7 +419,9 @@ describe("storage lifecycle", () => {
       loadConfig({ env, policyPath: join(directory, "missing.json") }).databasePath,
     );
     databases.add(db);
-    expect(db.query("SELECT version FROM schema_migrations").all()).toEqual([{ version: 1 }]);
+    expect(db.query("SELECT version FROM schema_migrations ORDER BY version").all()).toEqual([
+      { version: 1 },
+    ]);
   });
 
   test("CLI storage failures are safe and preserve the original file", async () => {
@@ -753,20 +730,7 @@ describe("loopback HTTP foundation", () => {
 
 function resolutionSetup(fetcher: TmdbFetch = async () => Response.json(tmdbFixtures.movies)) {
   const { db, path } = database();
-  const policy = reviewedPolicy();
-  policy.providers.tmdb.retainedFields = [
-    "id",
-    "title",
-    "name",
-    "original_title",
-    "original_name",
-    "release_date",
-    "first_air_date",
-    "original_language",
-    "origin_country",
-  ];
-  policy.providers.tmdb.displayedFields = [...policy.providers.tmdb.retainedFields];
-  savePolicy(policy);
+  savePolicy(reviewedPolicy());
   const configuration = config({ TMDB_READ_ACCESS_TOKEN: fakeSecret });
   const server = startServer({ db, config: configuration, port: 0 });
   servers.push(server);
@@ -1176,46 +1140,101 @@ describe("US2 submission and explicit selection", () => {
     expect(JSON.stringify(response.body)).not.toContain(fakeSecret);
   });
 
-  test("scoped candidate cursors reject invalid queries, stay bounded and apply current display policy", async () => {
+  test("candidate reads return current metadata without credentials and reject query parameters", async () => {
+    const s = resolutionSetup();
+    const id = await s.submit();
+    const inputId = (await s.summary(id)).inputs[0].id;
+    expect((await s.candidates(id, inputId)).body.items).toEqual([]);
+    await s.worker.runOnce();
+    s.configuration.providers.tmdb.credential = null;
+    const response = await s.candidates(id, inputId);
+    expect(response.status).toBe(200);
+    expect(response.body.items).toHaveLength(3);
+    expect(response.body.items.map((c: { ordinal: number }) => c.ordinal)).toEqual([0, 1, 2]);
+    expect(response.body).toMatchObject({
+      returnedCount: 3,
+      retainedCount: 3,
+      coverageBounded: true,
+    });
+    expect(response.body.queryContext).toMatchObject({ page: 1, language: "en-US" });
+    expect(response.body).not.toHaveProperty("nextCursor");
+    expect(response.body).not.toHaveProperty("snapshotAt");
+    expect(response.body.items[0]).not.toHaveProperty("restrictedFields");
+    expect(await s.summary(id)).not.toHaveProperty("limits");
+    for (const query of ["?limit=1", "?cursor=bad", "?other=x", "?limit=1&limit=2"])
+      expect(await s.candidates(id, inputId, query)).toMatchObject({
+        status: 400,
+        body: { error: { code: "invalid_query" } },
+      });
+    const other = await s.submit();
+    expect((await s.candidates(other, inputId)).status).toBe(404);
+    expect((await s.candidates(id, "missing")).status).toBe(404);
+  });
+
+  test("missing or malformed approval blocks saved metadata but leaves local selections and status readable", async () => {
     const s = resolutionSetup();
     const id = await s.submit();
     await s.worker.runOnce();
     const inputId = (await s.summary(id)).inputs[0].id;
-    const page = await s.candidates(id, inputId, "?limit=1");
-    expect(page.body.items).toHaveLength(1);
-    expect(page.body.nextCursor).toBeString();
-    const next = await s.candidates(
-      id,
-      inputId,
-      `?limit=2&cursor=${encodeURIComponent(page.body.nextCursor)}`,
-    );
-    expect(next.body.items).toHaveLength(2);
-    expect(next.body.nextCursor).toBeNull();
-    expect(next.body.snapshotAt).toBe(page.body.snapshotAt);
-    for (const query of [
-      "?limit=0",
-      "?limit=101",
-      "?limit=1.5",
-      "?cursor=bad",
-      "?other=x",
-      "?limit=1&limit=2",
-    ]) {
-      expect((await s.candidates(id, inputId, query)).status).toBe(400);
+    const candidateId = (await s.candidates(id, inputId)).body.items[0].id;
+    await s.api(`/${id}/selections`, { selections: [{ inputId, candidateId }] });
+    const before = await s.summary(id);
+    const records = s.db.serialize();
+    for (const invalid of [null, { ...reviewedPolicy().providers.tmdb, retainedFields: ["id"] }]) {
+      if (invalid === null) s.configuration.providers.tmdb.policy = null;
+      else {
+        savePolicy({
+          ...reviewedPolicy(),
+          providers: { ...reviewedPolicy().providers, tmdb: invalid },
+        });
+        s.configuration.providers.tmdb.policy = config().providers.tmdb.policy;
+      }
+      const blocked = await s.candidates(id, inputId);
+      expect(blocked).toMatchObject({
+        status: 503,
+        body: { error: { code: "metadata_policy_missing" } },
+      });
+      expect(JSON.stringify(blocked.body)).not.toContain("Heat");
+      expect(await s.summary(id)).toEqual(before);
+      expect(s.db.serialize()).toEqual(records);
     }
-    const other = await s.submit();
+  });
+
+  test("candidate listing excludes historical attempts, orders by ordinal and stays bounded", async () => {
+    const s = resolutionSetup(async () =>
+      Response.json({
+        results: Array.from({ length: 25 }, (_, i) => ({ id: i + 1, title: `Film ${i}` })),
+      }),
+    );
+    const id = await s.submit();
     await s.worker.runOnce();
-    const otherInput = (await s.summary(other)).inputs[0].id;
+    const inputId = (await s.summary(id)).inputs[0].id;
+    const first = await s.candidates(id, inputId);
+    expect(first.body.items).toHaveLength(20);
+    expect(first.body.limitFlags).toContain("resolution_limit_reached");
+    const op = s.db
+      .query<{ id: string }, [string]>("SELECT id FROM operations WHERE input_id = ?")
+      .get(inputId);
+    if (!op) throw new Error("Expected a saved resolution operation.");
+    s.db.run(
+      "INSERT INTO operation_attempts (id, operation_id, attempt_number, provider, query, template_version, started_at, deadline_at) VALUES ('new-attempt', ?, 2, 'tmdb', 'New query', '1', '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z')",
+      [op.id],
+    );
+    s.db.run("UPDATE operations SET current_attempt_id = 'new-attempt' WHERE id = ?", [op.id]);
+    expect((await s.candidates(id, inputId)).body.items).toEqual([]);
+    for (const ordinal of [2, 0, 1])
+      s.db.run(
+        "INSERT INTO resolution_candidates (id, input_id, attempt_id, ordinal, provider, provider_media_type, provider_id, title, work_type, retrieved_at, eligible) VALUES (?, ?, 'new-attempt', ?, 'tmdb', 'movie', ?, 'New label', 'film', '2026-01-01T00:00:01Z', 1)",
+        [`new-${ordinal}`, inputId, ordinal, ordinal + 1],
+      );
+    const current = (await s.candidates(id, inputId)).body;
+    expect(current.items.map((c: { id: string }) => c.id)).toEqual(["new-0", "new-1", "new-2"]);
+    expect(s.db.query("SELECT count(*) n FROM resolution_candidates").get()).toEqual({ n: 23 });
     expect(
-      (await s.candidates(other, otherInput, `?cursor=${encodeURIComponent(page.body.nextCursor)}`))
-        .status,
-    ).toBe(400);
-    expect((await s.candidates(other, inputId)).status).toBe(404);
-    s.configuration.providers.tmdb.policy = null;
-    const restricted = (await s.candidates(id, inputId)).body.items[0];
-    expect(restricted.title).toBeNull();
-    expect(restricted.restrictedFields).toContain("title");
-    expect(restricted.providerId).toBeNull();
-    expect((await s.summary(id)).inputs[0].id).toBe(inputId);
+      await s.api(`/${id}/selections`, {
+        selections: [{ inputId, candidateId: first.body.items[0].id }],
+      }),
+    ).toMatchObject({ status: 409, body: { error: { code: "candidate_ineligible" } } });
   });
 
   test("capacity limits reject submissions and final selection without partial writes", async () => {

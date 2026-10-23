@@ -10,28 +10,6 @@ const provider: Config["providers"]["tmdb"] = {
     revision: "test-only-v1",
     reviewedAt: "2026-01-01",
     permissionBasis: "test-only fixture, no live permission",
-    retainedFields: [
-      "id",
-      "title",
-      "name",
-      "original_title",
-      "original_name",
-      "release_date",
-      "first_air_date",
-      "original_language",
-      "origin_country",
-    ],
-    displayedFields: [
-      "id",
-      "title",
-      "name",
-      "original_title",
-      "original_name",
-      "release_date",
-      "first_air_date",
-      "original_language",
-      "origin_country",
-    ],
   },
 };
 
@@ -92,7 +70,7 @@ describe("TMDB resolution", () => {
     }
   });
 
-  test("uses exact sequential searches, namespaces, local year checks and metadata allowlists", async () => {
+  test("uses exact sequential searches, namespaces, local year checks and fixed metadata fields", async () => {
     const calls: { url: URL; init: RequestInit }[] = [];
     const result = await resolveSuccess({
       input: { title: " Heat ", year: 1995 },
@@ -238,7 +216,7 @@ describe("TMDB resolution", () => {
     expect(result.candidates).toEqual([]);
   });
 
-  test("fails closed before dispatch for missing credentials or retention permission", async () => {
+  test("fails closed before dispatch for missing credentials or provider approval", async () => {
     let calls = 0;
     const fetch: TmdbFetch = async () => {
       calls++;
@@ -247,10 +225,6 @@ describe("TMDB resolution", () => {
     const cases: [Config["providers"]["tmdb"], string][] = [
       [{ credential: null, policy: provider.policy }, "provider_credentials"],
       [{ credential: provider.credential, policy: null }, "metadata_policy_missing"],
-      [
-        { ...provider, policy: provider.policy && { ...provider.policy, retainedFields: [] } },
-        "metadata_restricted",
-      ],
     ];
     for (const [configuration, code] of cases) {
       await expect(

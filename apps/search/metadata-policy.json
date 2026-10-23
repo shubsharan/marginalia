@@ -4,16 +4,12 @@
     "tmdb": {
       "provider": "tmdb",
       "reviewedAt": null,
-      "permissionBasis": null,
-      "retainedFields": [],
-      "displayedFields": []
+      "permissionBasis": null
     },
     "exa": {
       "provider": "exa",
       "reviewedAt": null,
-      "permissionBasis": null,
-      "retainedFields": [],
-      "displayedFields": []
+      "permissionBasis": null
     }
   }
 }

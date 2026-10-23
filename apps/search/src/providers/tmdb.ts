@@ -1,12 +1,6 @@
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 import { z } from "zod";
-import {
-  boundedText,
-  calendarDateSchema,
-  LIMITS,
-  type Config,
-  type MetadataPolicy,
-} from "../config.ts";
+import { boundedText, calendarDateSchema, LIMITS, type Config } from "../config.ts";
 import { readBoundedJson } from "../body.ts";
 
 const workTypeSchema = z.enum(["film", "television_series"]);
@@ -120,13 +114,11 @@ function parseCandidate({
   raw,
   mediaType,
   input,
-  policy,
   retrievedAt,
 }: {
   raw: unknown;
   mediaType: MediaType;
   input: ResolutionInput;
-  policy: MetadataPolicy;
   retrievedAt: string;
 }): Result<Candidate | null, ProviderFailure> {
   const parsed = candidateSchema.safeParse(raw);
@@ -139,10 +131,6 @@ function parseCandidate({
   if (data.adult === true) return ok(null);
   const warnings: string[] = [];
   function field(name: keyof typeof data, max: number) {
-    if (!policy.retainedFields.includes(name)) {
-      warnings.push(`restricted_${name}`);
-      return null;
-    }
     const value = boundedText(max).safeParse(data[name]);
     if (!value.success) {
       warnings.push(`missing_or_invalid_${name}`);
@@ -156,12 +144,8 @@ function parseCandidate({
   const releaseDate = validatedDate.success ? validatedDate.data : null;
   if (date !== null && releaseDate === null) warnings.push(`invalid_${dateField}`);
   const countries = countriesSchema.safeParse(data.origin_country);
-  const originCountries =
-    !movie && policy.retainedFields.includes("origin_country") && countries.success
-      ? countries.data
-      : null;
-  if (!movie && originCountries === null)
-    warnings.push("missing_invalid_or_restricted_origin_country");
+  const originCountries = !movie && countries.success ? countries.data : null;
+  if (!movie && originCountries === null) warnings.push("missing_or_invalid_origin_country");
   const eligible =
     input.year === undefined ||
     (releaseDate !== null && Number(releaseDate.slice(0, 4)) === input.year);
@@ -201,12 +185,6 @@ export async function resolveTitle({
       : input.workType === "television_series"
         ? ["tv"]
         : ["movie", "tv"];
-  // Check both endpoints' permission before an untyped input makes its first call.
-  if (
-    !policy.retainedFields.includes("id") ||
-    types.some((type) => !policy.retainedFields.includes(type === "movie" ? "title" : "name"))
-  )
-    return err({ code: "metadata_restricted", retryAt: null });
   const endpoints: EndpointCoverage[] = [];
   const lists: Candidate[][] = [];
   let limited = false;
@@ -245,7 +223,7 @@ export async function resolveTitle({
     const seen = new Set<number>();
     const retrievedAt = new Date().toISOString();
     for (const raw of data.results) {
-      const candidate = parseCandidate({ raw, mediaType, input, policy, retrievedAt });
+      const candidate = parseCandidate({ raw, mediaType, input, retrievedAt });
       if (candidate.isErr()) return err(candidate.error);
       if (!candidate.value || seen.has(candidate.value.providerId)) continue;
       seen.add(candidate.value.providerId);

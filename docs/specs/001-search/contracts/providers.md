@@ -5,21 +5,21 @@ responses are untrusted; only validated, permitted metadata crosses into storage
 
 ## Shared limits and failures
 
-Run one external call at a time per worker. Each call has a 15-second deadline and a 2 MiB response
-limit enforced while reading, before JSON parsing. Operations have a 60-second deadline. There are
-no automatic retries. Save safe local codes and validated provider request IDs, never arbitrary
+Run one external call at a time per worker. Byte, timeout, and retry defaults live in
+`apps/search/src/config.ts`; enforce body limits while reading, before JSON parsing. There are no
+automatic retries. Save safe local codes and validated provider request IDs, never arbitrary
 exceptions, headers, raw responses, or provider error bodies.
 
 Set `redirect: "error"` on every provider fetch. A redirect fails the operation without contacting
 its destination; never forward credentials or replay the request there. Test this with local
 redirect endpoints and fake credentials, asserting that the destination receives no request.
 
-Honor valid `Retry-After` dates or seconds for rate/transient failures; otherwise set a 30-second
+Honor valid `Retry-After` dates or seconds for rate/transient failures; otherwise use the configured
 retry delay. Invalid JSON, oversized bodies, and malformed top-level arrays fail the operation.
 Unusable source locations create rejected-result records. Missing/invalid optional metadata becomes
 null with a warning code. Bound URLs to 4096 characters, titles to 500, author/publisher to 300,
-request/notice IDs to 128, and query to 2000. Oversized optional values become null, not truncated
-invented values.
+request/notice IDs to 128, and query to 2000. These are implementation defaults. Oversized optional
+values become null, not truncated invented values.
 
 ## TMDB
 
@@ -102,9 +102,9 @@ Omit `contents`, `outputSchema`, `systemPrompt`, deep modes, category/domain fil
 streaming. Do not call Contents, Answer, Agent, Snapshot, or Monitors.
 
 Allowlist result `id`, `url`, `title`, `author`, and `publishedDate`; response `requestId` and safe
-notice codes. Publisher remains null unless a future documented contract supplies it and metadata
-policy allows it. Drop unexpected `text`, `highlights`, `summary`, `subpages`, and synthesized
-output. Never log raw payloads, including parsing failures.
+notice codes. Publisher remains null unless a future reviewed contract supplies it. Drop unexpected
+`text`, `highlights`, `summary`, `subpages`, and synthesized output. Never log raw payloads,
+including parsing failures.
 
 Associate each result with the selected work whose query returned it. This is unverified relevance.
 Repeated normalized locations reuse one source ID and retain all selected-work associations. Keep
@@ -128,10 +128,19 @@ coverage. A valid empty array succeeds; a malformed response fails.
 
 ## Metadata permissions
 
-`metadata-policy.json` records provider, reviewed date, permission-basis reference, retained fields,
-and displayed fields. Only fields in this contract can be enabled. Unreviewed policy disables live
-work for that provider with `metadata_policy_missing`. Fixtures use a clearly marked test policy.
-Caller requests cannot override policy. Current display allowlists apply to historical output too.
+`metadata-policy.json` records a revision and, for each provider, its identity, reviewed date, and
+permission-basis reference. Approval covers retention and display of the complete fixed field set in
+this contract. Adapters explicitly construct metadata objects and drop unexpected fields. Missing or
+invalid approval disables provider calls and returns `503 metadata_policy_missing` on
+provider-metadata reads, including saved metadata. Local inputs, selections, IDs, and status remain
+readable. Saved reads need approval but do not need credentials or network access.
+
+Legacy `retainedFields` or `displayedFields` entries are rejected. To convert a reviewed legacy
+record, review retention and display of the complete fixed set, record its basis/date and a new
+revision, then remove the legacy arrays. Removing arrays alone does not establish approval. Restart
+after changing the file. Expanding the fixed contract requires renewed approval. The committed
+template remains unreviewed; fixtures use clearly marked test-only approval. Caller requests cannot
+override policy.
 
 Known restrictive notices reject affected metadata when retention/display is prohibited or unclear.
 Response-wide restrictions fail the operation with `metadata_restricted`. Ordinary search-quality

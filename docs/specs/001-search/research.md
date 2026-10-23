@@ -113,9 +113,9 @@ save provider error bodies, authentication headers, or arbitrary exception messa
 
 ## Metadata rights and finite work
 
-- Decision: Use an explicit provider metadata allowlist with a reviewed permission basis for
-  retention and local display. Known restrictive result notices reject affected metadata. Page
-  processing and display rights remain `unknown` on every candidate.
+- Decision: Use fixed adapter metadata fields with provider-level approval for retention and local
+  display. Known restrictive result notices reject affected metadata. Page processing and display
+  rights remain `unknown` on every candidate.
 - Rationale: FR-014 requires permitted metadata, but a search result grants no source-content
   rights. Metadata policy is narrower than feature 2's source-ingestion policy.
 - Alternatives considered: Saving arbitrary provider responses risks retaining prose or secrets.
@@ -125,9 +125,17 @@ save provider error bodies, authentication headers, or arbitrary exception messa
 The implementation must record the actual provider terms or account permission basis in a small
 metadata policy file before enabling live retention. This planning review does not establish those
 permissions. Missing or unreviewed policy blocks affected provider work with
-`metadata_policy_missing`. Saved reads use the current field allowlist, so disabling a field also
-suppresses historical output. Only built-in metadata fields can be enabled. Policy cannot enable
-source text or generated output.
+`metadata_policy_missing`. Missing approval also blocks saved provider-metadata reads with a 503
+error, while local IDs, inputs, selections, and status remain readable. Adapters use the fixed
+provider contract; configurable per-field retention and display rules are removed. Legacy field
+lists require a review of the complete fixed contract before conversion. Policy cannot enable source
+text or generated output.
+
+Candidate lists return at most 20 candidates from the current attempt, so cursor pagination adds no
+value there. Historical candidates stay internal. Persist query provenance, not an entire runtime
+limits snapshot per request. Keep transactional migrations and compatibility/integrity checks, but
+remove the duplicated TypeScript schema inventory. Dedicated operation, attempt, and rejection
+history endpoints are deferred; source-observation provenance and summary failures remain.
 
 ## Verification and remaining evidence
 

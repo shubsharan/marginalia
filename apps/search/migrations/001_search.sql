@@ -8,8 +8,7 @@ CREATE TABLE search_requests (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   id TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  frozen_at TEXT,
-  limits_snapshot TEXT NOT NULL CHECK (length(limits_snapshot) <= 4096 AND json_valid(limits_snapshot) AND json_type(limits_snapshot) = 'object')
+  frozen_at TEXT
 ) STRICT;
 
 CREATE TABLE title_inputs (
