@@ -7,10 +7,13 @@
 [provider contract](contracts/providers.md), and [quickstart.md](quickstart.md). Follow
 `.specify/memory/constitution.md` version 3.0.0.
 
-**Status**: Phase 1 setup complete. Bun 1.4.2 frozen install, temporary setup probes for test
-isolation/live-suite exclusion, shared TypeScript/Bun types, and runtime/migration environment
-loading passed. Probes were removed after validation. Formatting and diff checks passed. Repository
-lint found no source files to lint. Application runtime and feature acceptance remain NOT RUN.
+**Status**: Phases 1 and 2 complete. On 2026-10-23, Bun 1.4.2 passed 43 foundational tests and 156
+assertions against temporary databases and loopback HTTP servers. Checks cover configuration and
+policy, migration rollback and schema compatibility, retained identities and observations, ownership
+constraints, missing schema columns and integrity triggers, HTTP access and body limits, rejection
+of declared and streamed read-method bodies, and secret redaction. App type-check, repository lint,
+formatting, and diff checks passed. Evidence applies to the uncommitted Phase 2 changes based on
+`c7ba52e`. Provider execution, search stories, and SC-001 through SC-006 acceptance remain NOT RUN.
 
 **Tests**: Tasks implement the specification's independent tests, acceptance scenarios, and SC-001
 through SC-006 using the suites selected in the plan. Write each story's checks before its
@@ -53,28 +56,28 @@ extends the existing workspace. Scripts become runnable as their modules are imp
 
 **Purpose**: Establish storage, configuration, and local access controls shared by all stories.
 
-- [ ] T003 [P] Implement configuration and metadata-policy validation in `apps/search/src/config.ts`
+- [x] T003 [P] Implement configuration and metadata-policy validation in `apps/search/src/config.ts`
       and add a fail-closed `apps/search/metadata-policy.json` template. Resolve the database path
       from the app directory regardless of working directory; expose provider readiness without
       secrets, require a reviewed permission basis and fixed retained/displayed field allowlists for
       live provider work, and keep saved reads available when credentials are missing. Apply the
       limits from `contracts/search-api.md` and `contracts/providers.md`.
-- [ ] T004 [P] Define `apps/search/migrations/001_search.sql` from `data-model.md`: requests,
+- [x] T004 [P] Define `apps/search/migrations/001_search.sql` from `data-model.md`: requests,
       ordered inputs, candidates, works, memberships, sources, search records, immutable
       observations, operations, attempts, rejections, and migration records. Include foreign keys,
       identity and association uniqueness, operation target constraints, and sequence/index support
       for bounded reads.
-- [ ] T005 Implement storage opening, transactions, explicit migration execution, and startup schema
+- [x] T005 Implement storage opening, transactions, explicit migration execution, and startup schema
       verification in `apps/search/src/db.ts` after T003-T004. Verify foreign keys, WAL, and
       `synchronous=FULL`; roll back failed upgrades, reject changed migration checksums and unknown
       newer schemas, and never recreate a database on error. Use the same path for migration and
       runtime entrypoints.
-- [ ] T006 Implement the loopback server and `GET /health` in `apps/search/src/server.ts`: validate
+- [x] T006 Implement the loopback server and `GET /health` in `apps/search/src/server.ts`: validate
       Host, reject browser Origin/cross-site requests, enforce JSON mutations and the 16 KiB body
       limit, and return safe structured errors with correct status codes. Storage failure prevents
       readiness; provider readiness is separate. Keep database errors visible and exclude raw
       exceptions, provider bodies, and credentials from output.
-- [ ] T007 Add foundational checks in `apps/search/tests/search.test.ts` with temporary databases
+- [x] T007 Add foundational checks in `apps/search/tests/search.test.ts` with temporary databases
       and test-only configuration: migration rollback, checksum/newer-schema rejection, preserved
       committed rows, path consistency, missing credentials/policy,
       loopback/Host/Origin/content-type/body-size controls, and fake-secret redaction. Run them and

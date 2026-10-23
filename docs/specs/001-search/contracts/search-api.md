@@ -1,13 +1,15 @@
 # Local search API
 
-Planned JSON API at `http://127.0.0.1:4310`. No routes exist yet. Public hosting and the full
-knowledge-query API are outside this feature.
+JSON API at `http://127.0.0.1:4310`. Phase 2 implements `GET /health`; the other routes remain
+planned. Public hosting and the full knowledge-query API are outside this feature.
 
 ## Access and configuration
 
 Bind only loopback. Validate Host against the configured loopback address/port. Reject browser
 Origin headers and cross-site requests; provide no CORS grant. Mutations require `application/json`.
-Return JSON as data, never HTML. This interface trusts the local machine and has no public accounts.
+Read methods and other non-mutation methods reject bodies with `400 body_not_allowed`, including
+declared and streamed bodies. Return JSON as data, never HTML. This interface trusts the local
+machine and has no public accounts.
 
 | Configuration            | Behavior                                                                                                     |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
@@ -19,6 +21,13 @@ Return JSON as data, never HTML. This interface trusts the local machine and has
 Missing provider configuration fails affected operations visibly while saved reads remain available.
 Storage/migration failure prevents readiness and startup. Health reports storage and provider
 configuration separately, without secret values. Database failure never returns success.
+
+`GET /health` returns `storage.ready` and per-provider entries under `providers.tmdb` and
+`providers.exa`. Each entry contains `credentialsConfigured`, `metadataPolicyReady`, `ready`, and
+`reasons`. Reasons use `provider_credentials` and `metadata_policy_missing`; these flags report
+local configuration, not verified provider access or legal permission. Startup requires explicit
+migration before opening storage and verifies required columns and integrity triggers. Later storage
+failures return a safe 503 error.
 
 ## Limits and pagination
 

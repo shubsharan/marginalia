@@ -4,8 +4,9 @@
 
 **Input**: `docs/specs/001-search/spec.md`
 
-Status: Phase 0 research and Phase 1 design complete. Runtime implementation has not started. Spec
-Kit reports logical branch `001-search`; the actual Git branch includes `feat-`.
+Status: Setup and foundational runtime tasks T001-T007 are implemented. Provider adapters and search
+stories remain planned. Spec Kit reports logical branch `001-search`; the actual Git branch includes
+`feat-`.
 
 ## Summary
 
@@ -121,9 +122,10 @@ apps/search/
   tests/live-acceptance.test.ts
 ```
 
-These paths are proposed. The server owns HTTP validation; search owns submit/select/retry/read; the
-worker dispatches persistent operations; the database module owns migrations and transactions.
-Provider modules validate external responses. No repository/service class layers are needed.
+The foundation paths exist; story modules remain planned. The server owns HTTP validation; search
+owns submit/select/retry/read; the worker dispatches persistent operations; the database module owns
+migrations and transactions. Provider modules validate external responses. No repository/service
+class layers are needed.
 
 Implementation must also update workspace development dependencies and the Bun lockfile, replace the
 starter README with actual setup, ignore database/WAL/SHM files, and add app scripts for `dev`,
@@ -145,7 +147,8 @@ dirty changes to the roadmap, specification, and requirements checklist and make
 | FR-014 to FR-016 | Metadata-only requests, content filtering, policy, missing fields, unsafe URLs, secret redaction, local access |
 | SC-001 to SC-006 | Timed setup, ten-work live evaluation, ambiguity, duplicates/restart, coverage, provenance audit               |
 
-Use [quickstart.md](quickstart.md) for acceptance. Runtime checks remain NOT RUN.
+Use [quickstart.md](quickstart.md) for acceptance and [tasks.md](tasks.md) for foundational test
+evidence. Full-feature acceptance remains NOT RUN.
 
 ## Complexity tracking
 

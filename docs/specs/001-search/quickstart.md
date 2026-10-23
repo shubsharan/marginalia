@@ -1,7 +1,8 @@
 # Validate search
 
-This is the implementation acceptance guide. The application, scripts, fixtures, and routes below
-are planned and do not exist yet. Do not report these checks as passed during planning.
+This is the implementation acceptance guide. Storage migration, loopback startup, `GET /health`, and
+foundational tests are implemented through Phase 2. Submission, selection, provider execution, and
+the full acceptance scenarios below remain planned. See [tasks.md](tasks.md) for verified coverage.
 
 ## Prerequisites
 
@@ -163,5 +164,5 @@ human may review linked sources outside the application to score relevance; this
 step. Pass SC-002 only if all ten identities are correct and at least nine works have a relevant
 source. Provider-free checks cannot substitute for this result.
 
-Report SC-001 through SC-006 individually as PASS, FAIL, or NOT RUN with evidence. During this
-planning workflow all runtime acceptance remains NOT RUN.
+Report SC-001 through SC-006 individually as PASS, FAIL, or NOT RUN with evidence. Full-feature
+acceptance remains NOT RUN after Phase 2.
