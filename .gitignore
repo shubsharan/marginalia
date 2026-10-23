@@ -11,9 +11,20 @@ node_modules
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*
+!.env.example
+
+# Local search storage, including custom database paths within the app
+apps/search/**/*.sqlite
+apps/search/**/*.sqlite-*
+apps/search/**/*.sqlite3
+apps/search/**/*.sqlite3-*
+apps/search/**/*.db
+apps/search/**/*.db-*
 
 # Testing
 coverage
+apps/search/acceptance/
 
 # Turbo
 .turbo
@@ -32,6 +43,7 @@ dist
 
 
 # Debug
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

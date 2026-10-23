@@ -1,173 +1,166 @@
-# Turborepo starter
+# Marginalia
 
-This Turborepo starter is maintained by the Turborepo core team.
+Search for research-source candidates about a collection of films and television series. The local
+JSON API resolves titles through TMDB, waits for your explicit selections, queries Exa Search, and
+saves source metadata and provenance in SQLite. It never retrieves source pages or generates claims.
 
-## Using this example
+Phases 1-7 are implemented and verified. Live acceptance resolved all ten corpus identities and
+passed with owner-reviewed relevant references for all ten works. See the
+[acceptance guide](docs/specs/001-search/quickstart.md) for deterministic, live, and human-review
+evidence, and the [API contract](docs/specs/001-search/contracts/search-api.md) for response
+meanings.
 
-Run the following command:
+## Set up local search
 
-```sh
-npx create-turbo@latest
-```
+Use Bun 1.4.2, `curl`, and `jq`. Live execution needs a TMDB API Read Access Token, an Exa API key
+with search credits, and reviewed metadata permissions for both providers.
 
-## What's inside?
-
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [oxlint](https://oxc.rs/docs/guide/usage/linter) for code linting
-- [oxfmt](https://oxc.rs/docs/guide/usage/formatter) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation)
-installed (recommended):
+From the repository root:
 
 ```sh
-cd my-turborepo
-turbo build
+bun install --frozen-lockfile
+cp apps/search/.env.example apps/search/.env.local
 ```
 
-Without global `turbo`, use your package manager:
+Set `TMDB_READ_ACCESS_TOKEN` and `EXA_API_KEY` in the ignored `apps/search/.env.local`. The optional
+`MARGINALIA_DB_PATH` defaults to `apps/search/data/search.sqlite`; relative paths resolve from
+`apps/search`, regardless of the launch directory. Keep credentials out of URLs and policy files.
+
+Review retention and display of the complete fixed field set in the
+[provider contract](docs/specs/001-search/contracts/providers.md). In
+`apps/search/metadata-policy.json`, record a new `revision` and each provider's `reviewedAt` date
+and `permissionBasis` reference. The checked-in policy records the project owner's confirmation of
+agreements for these accounts. Other operators must establish the permission basis applicable to
+their own accounts. Missing or invalid policy blocks calls and metadata reads. Do not approve it
+using test-fixture permissions. Legacy `retainedFields` and `displayedFields` arrays are rejected.
+Restart after changing policy. Follow the [TMDB FAQ](https://developer.themoviedb.org/docs/faq) for
+the applicable attribution, logo, and licensing requirements. Metadata approval does not grant
+rights to source-page content.
+
+With the server stopped, initialize or migrate the database, then start:
 
 ```sh
-cd my-turborepo
-npx turbo build
-bun exec turbo build
-bun exec turbo build
+bun run --cwd apps/search db:migrate
+bun run --cwd apps/search start
 ```
 
-You can build a specific package by using a
-[filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Startup requires the current schema and checks migration checksums and SQLite integrity. An error
+preserves existing storage. Earlier experimental schemas have no compatibility migration; use a
+fresh database path without deleting saved data. Keep SQLite, WAL, and SHM files together.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation)
-installed:
+In another terminal:
 
 ```sh
-turbo build --filter=docs
+curl --fail-with-body -sS http://127.0.0.1:4310/health | jq
 ```
 
-Without global `turbo`:
+Expect `storage.ready: true` and separate provider configuration flags. Those flags do not verify
+account access or permissions. The API binds to `127.0.0.1:4310`, rejects browser origins, and
+requires `application/json` mutations. Use the loopback address in the examples.
+
+## Confirm works and search
 
 ```sh
-npx turbo build --filter=docs
-bun exec turbo build --filter=docs
-bun exec turbo build --filter=docs
+search_request_id=$(curl --fail-with-body -sS \
+  http://127.0.0.1:4310/v1/search-requests \
+  -H 'Content-Type: application/json' \
+  -d '{"inputs":[{"title":"Heat","year":1995,"workType":"film"},{"title":"Arrival","year":2016,"workType":"film"},{"title":"Breaking Bad","year":2008,"workType":"television_series"}]}' \
+  | jq -r '.requestId')
+curl --fail-with-body -sS \
+  "http://127.0.0.1:4310/v1/search-requests/$search_request_id" | jq
 ```
 
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation)
-installed (recommended):
+Poll until resolution finishes. For each input ID from the summary, inspect candidates:
 
 ```sh
-cd my-turborepo
-turbo dev
+search_input_id='replace-with-an-input-id-from-the-summary'
+curl --fail-with-body -sS \
+  "http://127.0.0.1:4310/v1/search-requests/$search_request_id/inputs/$search_input_id/candidates" | jq
 ```
 
-Without global `turbo`, use your package manager:
+Choose by identity, type, and date, including for a singleton. Send the confirmed candidate ID:
 
 ```sh
-cd my-turborepo
-npx turbo dev
-bun exec turbo dev
-bun exec turbo dev
+search_candidate_id='replace-with-the-confirmed-candidate-id'
+jq -n --arg inputId "$search_input_id" --arg candidateId "$search_candidate_id" \
+  '{selections:[{inputId:$inputId,candidateId:$candidateId}]}' \
+  | curl --fail-with-body -sS \
+      "http://127.0.0.1:4310/v1/search-requests/$search_request_id/selections" \
+      -H 'Content-Type: application/json' --data-binary @- | jq
 ```
 
-You can develop a specific package by using a
-[filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Repeat for every input. Search starts only after all inputs resolve. The frozen work set receives
+one Exa query per distinct work; duplicate inputs keep their mappings. A declined or unmatched input
+remains unresolved. Submit a new request to clarify inputs or change a frozen collection.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation)
-installed:
+## Read saved results
+
+Poll the summary for completion and inspect saved works and sources:
 
 ```sh
-turbo dev --filter=web
+curl --fail-with-body -sS http://127.0.0.1:4310/v1/search-requests | jq
+curl --fail-with-body -sS \
+  "http://127.0.0.1:4310/v1/search-requests/$search_request_id/works" | jq
+curl --fail-with-body -sS \
+  "http://127.0.0.1:4310/v1/search-requests/$search_request_id/sources?limit=2" | jq
 ```
 
-Without global `turbo`:
+Growing lists return `items`, `snapshotAt`, and `nextCursor`. Follow a non-null cursor with the same
+endpoint and filters. Use `--get --data-urlencode "cursor=$search_cursor"` with curl when following
+it. Limits are 1-100 rows per page. Candidate lists take no query parameters and return at most 20
+current candidates.
+
+Follow source `observationsUrl` links for title, author, publication date, exact query, rank, time,
+and request/work associations. Stable references are available at `/v1/works/:id` and
+`/v1/sources/:id`. Source lists accept `workId`; source observations accept `requestId`. Different
+URLs remain distinct even when titles match. Repeated normalized URLs share one source identity.
+
+Stop with Ctrl-C and restart using the same database to read the same saved IDs and observations.
+Remove credentials from `.env.local` to verify saved reads without provider calls; keep reviewed
+metadata approval. Missing approval returns `503 metadata_policy_missing` for that provider's
+metadata, while local inputs, selections, counts, and status remain readable.
+
+Requests accept 1-20 inputs and a 16 KiB JSON body. Searches retain at most 20 results per work.
+Coverage is bounded, result relevance is unverified, and source processing/display permissions stay
+`unknown`. Summaries distinguish empty success, rejected URLs, and failures. Graceful shutdown
+interrupts active work. Startup and one-second sweeps mark expired attempts interrupted; pending
+work resumes, while failed or interrupted work requires explicit retry after its saved retry time.
 
 ```sh
-npx turbo dev --filter=web
-bun exec turbo dev --filter=web
-bun exec turbo dev --filter=web
+curl --fail-with-body -sS \
+  "http://127.0.0.1:4310/v1/search-requests/$search_request_id/retry" \
+  -H 'Content-Type: application/json' -d '{}' | jq
 ```
 
-### Remote Caching
+Use `{}` to retry all due failures or `{"operationIds":["operation-id-from-nextActions"]}` to choose
+operations. Completed work never repeats. A crash after a provider receives a request but before
+local commit can still cause a repeated provider charge on retry.
 
-> [!TIP] Vercel Remote Cache is free for all plans. Get started today at
-> [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as
-[Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts
-across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with
-Vercel. If you don't have an account you can
-[create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following
-commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation)
-installed (recommended):
+## Check the implementation
 
 ```sh
-cd my-turborepo
-turbo login
+bun run --cwd apps/search test
+bun run --cwd apps/search check-types
+bun run lint
+bun run format
 ```
 
-Without global `turbo`, use your package manager:
+Ordinary tests use fixtures, temporary databases, and loopback servers. They make no live provider
+calls. Recovery tests kill a child worker and separately release stale responses from surviving
+workers. The owner-confirmed permission basis, live quality review, and automated setup timing are
+recorded in the acceptance guide; agreement text was not independently reviewed. The
+[live acceptance workflow](docs/specs/001-search/quickstart.md#measure-live-quality-separately)
+captures a committed ten-work corpus, then scores human judgments without repeating provider calls.
 
-```sh
-cd my-turborepo
-npx turbo login
-bun exec turbo login
-bun exec turbo login
-```
+## Credits
 
-This will authenticate the Turborepo CLI with your
-[Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+<a href="https://www.themoviedb.org"><img alt="TMDB" width="100" src="https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"></a>
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the
-root of your Turborepo:
+This product uses the TMDB API but is not endorsed or certified by TMDB.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation)
-installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-bun exec turbo link
-bun exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+The logo is an unmodified [approved TMDB logo](https://www.themoviedb.org/about/logos-attribution).
+Candidate and work provenance link to `/credits`, a local JSON endpoint with the attribution notice,
+official logo URL, provider link, and
+[attribution requirements](https://developer.themoviedb.org/docs/faq). Exa supplies search metadata;
+source locations and search observations preserve its provenance. Attribution does not establish
+account permission or rights to source content.

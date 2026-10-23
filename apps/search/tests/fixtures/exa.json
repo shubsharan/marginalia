@@ -1,0 +1,23 @@
+{
+  "requestId": "fixture-exa-request",
+  "results": [
+    {
+      "id": "result-1",
+      "url": "https://EXAMPLE.org:443/Film/Heat?b=2&a=1#section",
+      "title": "Heat and the city",
+      "author": "A Critic",
+      "publishedDate": "2020-02-29T12:30:00Z",
+      "publisher": "FORBIDDEN publisher",
+      "text": "FORBIDDEN body",
+      "highlights": ["FORBIDDEN highlight"],
+      "summary": "FORBIDDEN synthesis",
+      "subpages": [{ "url": "https://unselected.example.org/other", "text": "FORBIDDEN subpage" }]
+    },
+    { "url": "http://example.org/Film/Heat?b=2&a=1", "title": "Heat and the city" },
+    { "url": "https://example.org/Film/Heat?b=2&a=1#other" },
+    { "url": "http://127.0.0.1/private", "text": "FORBIDDEN private result" }
+  ],
+  "notices": [{ "code": "RESTRICTIONS_RELAXED", "message": "FORBIDDEN free text" }],
+  "warnings": [{ "code": "UNKNOWN_QUALITY_NOTICE", "message": "FORBIDDEN warning" }],
+  "output": { "content": "FORBIDDEN output" }
+}

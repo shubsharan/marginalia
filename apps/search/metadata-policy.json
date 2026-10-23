@@ -1,0 +1,15 @@
+{
+  "revision": "owner-confirmed-2026-10-23-v1",
+  "providers": {
+    "tmdb": {
+      "provider": "tmdb",
+      "reviewedAt": "2026-10-23",
+      "permissionBasis": "Project owner confirmed on 2026-10-23 that an agreement covers Marginalia's AI-connected TMDB use and retention/display of the fixed metadata contract, and authorized continuing without supplying copies. Owner attestation; agreement text was not independently reviewed. Public terms: https://www.themoviedb.org/api-terms-of-use"
+    },
+    "exa": {
+      "provider": "exa",
+      "reviewedAt": "2026-10-23",
+      "permissionBasis": "Project owner confirmed on 2026-10-23 that applicable Exa account terms or permission cover retention/display of the fixed Search metadata contract, and authorized continuing without supplying copies. Owner attestation; agreement text was not independently reviewed. Public terms: https://exa.ai/terms"
+    }
+  }
+}

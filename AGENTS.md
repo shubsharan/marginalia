@@ -18,3 +18,9 @@ enabled means a later qualifying invocation will add it again. Set `"agentGuidan
 root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the
 block committed with your work to avoid an uncommitted change on the next agent invocation.
 <!-- END:turborepo-agent-rules -->
+
+<!-- SPECKIT START -->
+
+For additional context about technologies to be used, project structure, shell commands, and other
+important information, read the current plan at docs/specs/001-search/plan.md
+<!-- SPECKIT END -->

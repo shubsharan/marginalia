@@ -1,0 +1,51 @@
+{
+  "movies": {
+    "page": 1,
+    "total_pages": 2,
+    "total_results": 3,
+    "results": [
+      {
+        "id": 949,
+        "title": "Heat",
+        "original_title": "Heat",
+        "release_date": "1995-12-15",
+        "original_language": "en",
+        "adult": false,
+        "overview": "FORBIDDEN_OVERVIEW",
+        "poster_path": "FORBIDDEN_IMAGE"
+      },
+      { "id": 100, "title": "Heat", "release_date": "1986-11-12" },
+      { "id": 101, "title": "Heat", "release_date": "2023-02-29" }
+    ]
+  },
+  "tv": {
+    "page": 1,
+    "total_pages": 1,
+    "total_results": 2,
+    "results": [
+      {
+        "id": 949,
+        "name": "Heat",
+        "original_name": "Heat",
+        "first_air_date": "2023-07-11",
+        "origin_country": ["GB"],
+        "original_language": "en"
+      },
+      { "id": 102, "name": "Heat", "first_air_date": "" }
+    ]
+  },
+  "translated": {
+    "page": 1,
+    "total_pages": 1,
+    "total_results": 1,
+    "results": [
+      {
+        "id": 129,
+        "title": "Spirited Away",
+        "original_title": "Sen to Chihiro no kamikakushi",
+        "release_date": "2001-07-20",
+        "original_language": "ja"
+      }
+    ]
+  }
+}

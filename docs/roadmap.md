@@ -17,13 +17,15 @@ that real data.
   need not wait.
 - Each feature owns a complete workflow: its writes, reads, and failure behavior. Backend features
   are usable without application pages; their graphical interface arrives with the application.
-- The repository currently contains workspace tooling, shared TypeScript configuration, and Spec Kit
-  setup. Nothing below is implemented. Stack, providers, schemas, and extraction methods are chosen
-  in feature plans. The existing `001-research-work-collection` spec spans backend features 1–4.
+- Search implements local title resolution, explicit selection, bounded source search, saved reads,
+  selective retry, crash recovery, and metadata provenance. Phase 7 acceptance passed with automated
+  live setup and owner-reviewed relevant references for all ten corpus works. The remaining features
+  stay planned. Stack, providers, schemas, and extraction methods are chosen in feature plans. The
+  [search spec](specs/001-search/spec.md) covers backend feature 1.
 
 ## Backend features
 
-### 1. Source search and discovery
+### 1. Search
 
 Resolve a caller-selected set of film or television titles and discover relevant external sources
 for researching them together. Ambiguous matches are exposed for caller resolution, and automatic

@@ -1,0 +1,71 @@
+{
+  "version": "search-v1",
+  "declaredAt": "2026-10-23",
+  "rubric": "A relevant reference addresses the exact selected work and offers substantive criticism, analysis, an interview, or production context. Title matches, listings, streaming offers, and references about a remake or unrelated work do not qualify. A human records a decision and reason for each work, citing a returned source URL for positive decisions. All ten identities must match and at least nine works must have a relevant reference. Missing evidence or judgments is NOT RUN, never PASS.",
+  "works": [
+    { "title": "Heat", "year": 1995, "workType": "film", "mediaType": "movie", "providerId": 949 },
+    {
+      "title": "Arrival",
+      "year": 2016,
+      "workType": "film",
+      "mediaType": "movie",
+      "providerId": 329865
+    },
+    {
+      "title": "Solaris",
+      "year": 1972,
+      "workType": "film",
+      "mediaType": "movie",
+      "providerId": 593
+    },
+    {
+      "title": "Solaris",
+      "year": 2002,
+      "workType": "film",
+      "mediaType": "movie",
+      "providerId": 2103
+    },
+    {
+      "title": "Sen to Chihiro no Kamikakushi",
+      "year": 2001,
+      "workType": "film",
+      "mediaType": "movie",
+      "providerId": 129
+    },
+    {
+      "title": "Gisaengchung",
+      "year": 2019,
+      "workType": "film",
+      "mediaType": "movie",
+      "providerId": 496243
+    },
+    {
+      "title": "Breaking Bad",
+      "year": 2008,
+      "workType": "television_series",
+      "mediaType": "tv",
+      "providerId": 1396
+    },
+    {
+      "title": "The Wire",
+      "year": 2002,
+      "workType": "television_series",
+      "mediaType": "tv",
+      "providerId": 1438
+    },
+    {
+      "title": "Dark",
+      "year": 2017,
+      "workType": "television_series",
+      "mediaType": "tv",
+      "providerId": 70523
+    },
+    {
+      "title": "Twin Peaks",
+      "year": 1990,
+      "workType": "television_series",
+      "mediaType": "tv",
+      "providerId": 1920
+    }
+  ]
+}
