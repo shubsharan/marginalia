@@ -1,75 +1,57 @@
+import { Hono, type MiddlewareHandler } from "hono";
 import type { Database } from "bun:sqlite";
 import { LIMITS, loadConfig, providerReadiness, type Config } from "./config.ts";
+import { readBoundedJson } from "./body.ts";
+import { RequestError } from "./errors.ts";
 import { openDatabase, StorageError } from "./db.ts";
-
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+import { listCandidates, requestSummary, selectCandidates, submitRequest } from "./search.ts";
+import { createResolutionWorker } from "./worker.ts";
 
 function json(value: unknown, status = 200) {
   return Response.json(value, {
     status,
-    headers: { "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" },
+    headers: {
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    },
   });
 }
 
 function errorResponse(error: unknown) {
-  if (error instanceof HttpError)
-    return json({ error: { code: error.code, message: error.message, details: [] } }, error.status);
-  const code = error instanceof StorageError ? error.code : "internal_error";
+  if (error instanceof RequestError)
+    return json(
+      { error: { code: error.code, message: error.message, details: error.details } },
+      error.status,
+    );
+  const storageFailure =
+    error instanceof StorageError || (error instanceof Error && error.name === "SQLiteError");
+  const code =
+    error instanceof StorageError
+      ? error.code
+      : storageFailure
+        ? "storage_unavailable"
+        : "internal_error";
   process.stderr.write(JSON.stringify({ level: "error", code }) + "\n");
   return json(
     { error: { code, message: "The request could not be completed.", details: [] } },
-    error instanceof StorageError ? 503 : 500,
+    storageFailure ? 503 : 500,
   );
 }
 
 async function readJson(request: Request): Promise<unknown> {
   const mediaType = request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase();
   if (mediaType !== "application/json")
-    throw new HttpError(415, "unsupported_content_type", "Mutations require application/json.");
+    throw new RequestError(415, "unsupported_content_type", "Mutations require application/json.");
   const length = request.headers.get("Content-Length");
   if (length !== null && (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length))))
-    throw new HttpError(400, "invalid_body_length", "Invalid body length.");
+    throw new RequestError(400, "invalid_body_length", "Invalid body length.");
   if (length !== null && Number(length) > LIMITS.maxBodyBytes)
-    throw new HttpError(413, "body_too_large", "The JSON body exceeds 16 KiB.");
-  const reader = request.body?.getReader();
-  if (!reader) throw new HttpError(400, "malformed_json", "A valid JSON body is required.");
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > LIMITS.maxBodyBytes) {
-        await reader.cancel();
-        throw new HttpError(413, "body_too_large", "The JSON body exceeds 16 KiB.");
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-  } catch (error) {
-    if (error instanceof SyntaxError || error instanceof TypeError)
-      throw new HttpError(400, "malformed_json", "A valid JSON body is required.");
-    throw error;
-  }
+    throw new RequestError(413, "body_too_large", "The JSON body exceeds 16 KiB.");
+  const result = await readBoundedJson(request.body, LIMITS.maxBodyBytes);
+  if (result.isOk()) return result.value;
+  if (result.error === "body_too_large")
+    throw new RequestError(413, "body_too_large", "The JSON body exceeds 16 KiB.");
+  throw new RequestError(400, "malformed_json", "A valid JSON body is required.");
 }
 
 export function startServer({
@@ -81,54 +63,81 @@ export function startServer({
   config: Config;
   port?: number;
 }) {
+  const app = new Hono<{ Bindings: { host: string }; Variables: { body: unknown } }>();
+  const notFound = () =>
+    json(
+      { error: { code: "not_found", message: "The requested route was not found.", details: [] } },
+      404,
+    );
+  const noQuery: MiddlewareHandler = async (c, next) => {
+    if (new URL(c.req.url).search)
+      throw new RequestError(400, "invalid_query", "This route accepts no query parameters.");
+    await next();
+  };
+  app.onError(errorResponse);
+  app.notFound(notFound);
+  app.use("*", async (c, next) => {
+    const request = c.req.raw;
+    if (request.headers.get("Host") !== c.env.host)
+      throw new RequestError(403, "host_rejected", "The Host header is not allowed.");
+    const site = request.headers.get("Sec-Fetch-Site");
+    if (
+      request.headers.has("Origin") ||
+      (site !== null && site !== "none" && site !== "same-origin")
+    )
+      throw new RequestError(
+        403,
+        "origin_rejected",
+        "Browser origins and cross-site requests are not allowed.",
+      );
+    const mutation = ["POST", "PUT", "PATCH", "DELETE"].includes(request.method);
+    if (
+      !mutation &&
+      (request.body !== null ||
+        request.headers.has("Transfer-Encoding") ||
+        Number(request.headers.get("Content-Length") ?? 0) > 0)
+    )
+      throw new RequestError(
+        400,
+        "body_not_allowed",
+        "This request method does not accept a body.",
+      );
+    if (mutation) c.set("body", await readJson(request));
+    try {
+      if (!db.query("SELECT version FROM schema_migrations LIMIT 1").get())
+        throw new StorageError("schema_invalid");
+    } catch {
+      throw new StorageError("storage_unavailable");
+    }
+    if (request.method === "HEAD") return notFound();
+    await next();
+  });
+  app.get("/health", () =>
+    json({ storage: { ready: true }, providers: providerReadiness(config) }),
+  );
+  app.post("/v1/search-requests", noQuery, (c) => json(submitRequest(db, c.get("body")), 202));
+  app.get("/v1/search-requests/:id", noQuery, (c) => json(requestSummary(db, c.req.param("id"))));
+  app.post("/v1/search-requests/:id/selections", noQuery, (c) =>
+    json(selectCandidates(db, c.req.param("id"), c.get("body"))),
+  );
+  app.get("/v1/search-requests/:id/inputs/:inputId/candidates", (c) =>
+    json(
+      listCandidates(
+        db,
+        config,
+        c.req.param("id"),
+        c.req.param("inputId"),
+        new URL(c.req.url).searchParams,
+      ),
+    ),
+  );
   return Bun.serve<undefined>({
     hostname: "127.0.0.1",
     port,
     development: false,
     // Count streamed bytes ourselves so all 413 responses use the JSON error contract.
     maxRequestBodySize: Number.MAX_SAFE_INTEGER,
-    async fetch(request, server) {
-      try {
-        if (request.headers.get("Host") !== `127.0.0.1:${server.port}`)
-          throw new HttpError(403, "host_rejected", "The Host header is not allowed.");
-        const site = request.headers.get("Sec-Fetch-Site");
-        if (
-          request.headers.has("Origin") ||
-          (site !== null && site !== "none" && site !== "same-origin")
-        )
-          throw new HttpError(
-            403,
-            "origin_rejected",
-            "Browser origins and cross-site requests are not allowed.",
-          );
-        const mutation = ["POST", "PUT", "PATCH", "DELETE"].includes(request.method);
-        if (
-          !mutation &&
-          (request.body !== null ||
-            request.headers.has("Transfer-Encoding") ||
-            Number(request.headers.get("Content-Length") ?? 0) > 0)
-        ) {
-          throw new HttpError(
-            400,
-            "body_not_allowed",
-            "This request method does not accept a body.",
-          );
-        }
-        if (mutation) await readJson(request);
-        if (request.method === "GET" && new URL(request.url).pathname === "/health") {
-          try {
-            if (!db.query("SELECT version FROM schema_migrations LIMIT 1").get())
-              throw new StorageError("schema_invalid");
-          } catch {
-            throw new StorageError("storage_unavailable");
-          }
-          return json({ storage: { ready: true }, providers: providerReadiness(config) });
-        }
-        throw new HttpError(404, "not_found", "The requested route was not found.");
-      } catch (error) {
-        return errorResponse(error);
-      }
-    },
+    fetch: (request, server) => app.fetch(request, { host: `127.0.0.1:${server.port}` }),
     error: errorResponse,
   });
 }
@@ -139,11 +148,14 @@ if (import.meta.main) {
     const config = loadConfig();
     db = openDatabase(config.databasePath);
     const server = startServer({ db, config });
+    const worker = createResolutionWorker({ db, config });
+    worker.start();
     const connection = db;
     let stopping = false;
     async function stop() {
       if (stopping) return;
       stopping = true;
+      await worker.stop();
       await server.stop(true);
       connection.close();
     }

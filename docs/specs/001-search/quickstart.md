@@ -1,8 +1,47 @@
 # Validate search
 
-This is the implementation acceptance guide. Storage migration, loopback startup, `GET /health`, and
-foundational tests are implemented through Phase 2. Submission, selection, provider execution, and
-the full acceptance scenarios below remain planned. See [tasks.md](tasks.md) for verified coverage.
+This is the implementation acceptance guide. Phase 3 adds TMDB resolution, submission, request
+summary, candidate pagination, and explicit selection to the foundational runtime. Final selection
+freezes memberships and queues search operations, which remain pending until Phase 4. Exa execution,
+retry and crash recovery, saved source reads, and full acceptance remain planned.
+
+## Phase 3 verification
+
+On 2026-10-23, Bun 1.4.2 passed 82 tests with 408 assertions across `body.test.ts`,
+`providers.test.ts`, and `search.test.ts`. Tests use sanitized fixtures, temporary SQLite databases,
+and loopback servers. The initial US2 tests failed because the TMDB and worker modules did not
+exist. Frozen dependency installation, app type-check, repository lint, formatting, and
+`git diff --check` passed after the owner-requested simplification.
+
+Implementation revision: uncommitted Phase 3 changes based on
+`23227decfde1cc357f1288492fe7dbe647d4b2f6`. The implementation snapshot SHA-256 is
+`8e8c8834742839735e5253b235683568abcef3a27d82156ca3244c32f04a77db`. The digest covers `.gitignore`,
+`bun.lock`, `apps/search/package.json`, `apps/search/src/**/*.ts`, `apps/search/tests/**/*.ts`, and
+`apps/search/tests/fixtures/**/*.json`, fifteen files total. Sort the paths and hash each UTF-8
+path, a NUL byte, its file bytes, and another NUL byte in sequence.
+
+Hono 4.13.13 handles the existing routes and shared access checks. Zod 4.6.7 validates boundary data
+and supplies inferred input types. Neverthrow 8.2.0 represents expected provider failures. The
+shared JSON reader replaces duplicate byte-reading loops and manual chunk concatenation. Request
+errors use one class; status rules use guard clauses; summaries join selected work IDs; candidate
+parsing is separate from provider dispatch. New checks cover split UTF-8, oversized-stream
+cancellation, raw-error redaction, synchronous fetch failures, and selection rollback after writes
+begin. Database callbacks still throw to trigger rollback. No Phase 4 routes or search execution
+were added.
+
+Verified checks include remakes, alternative-title matches, movie/TV numeric-ID collisions, local
+year eligibility, unknown dates, deterministic capped interleaving, endpoint coverage, exact Bearer
+requests, and redirects that receive no credentials at their destination. Failed required searches
+and failed database publication leave no candidates. Every singleton still needs confirmation.
+Invalid batches, ineligible choices, capacity overflow, and repeated final selections preserve prior
+state. Duplicate inputs retain their mappings and queue one search operation per distinct work.
+Selections and summaries survive database reopen with no provider configuration. Calls run outside
+transactions; cancellation and expired or superseded attempt publication checks pass.
+
+Live TMDB compatibility, identity quality, and metadata permissions remain unverified. The committed
+metadata policy still blocks live work until reviewed. Exa execution, crash recovery, and selective
+retry were not run. SC-001, SC-002, SC-003, SC-004, SC-005, and SC-006 are each **NOT RUN** as full
+acceptance criteria. The fixture checks prove only the Phase 3 behaviors listed here.
 
 ## Prerequisites
 
@@ -22,7 +61,7 @@ URL, fixture, policy file, saved result, or acceptance log.
 
 ## Initialize and start
 
-From the repository root, run these planned commands:
+From the repository root, run:
 
 ```sh
 bun install --frozen-lockfile
@@ -77,8 +116,9 @@ jq -n --arg inputId "$search_input_id" --arg candidateId "$search_candidate_id" 
 ```
 
 Repeat for remaining inputs. Expect no Exa calls until every input resolves. Final selection freezes
-the set and queues exactly three work searches. Poll the summary, then inspect saved works and
-sources:
+the set and queues exactly three work searches. Through Phase 3, the summary stays `searching` with
+all three searches pending. The following source and work inspection requires Phase 4. Poll the
+summary, then inspect saved works and sources:
 
 ```sh
 curl --fail-with-body -sS \
@@ -114,7 +154,7 @@ Unmatched or declined inputs require a clarified new request, not a technical re
 
 ## Run deterministic checks
 
-These planned commands must run without live providers or real credentials:
+Run these commands without live providers or real credentials:
 
 ```sh
 bun run --cwd apps/search test
@@ -165,4 +205,4 @@ step. Pass SC-002 only if all ten identities are correct and at least nine works
 source. Provider-free checks cannot substitute for this result.
 
 Report SC-001 through SC-006 individually as PASS, FAIL, or NOT RUN with evidence. Full-feature
-acceptance remains NOT RUN after Phase 2.
+acceptance remains NOT RUN after Phase 3.

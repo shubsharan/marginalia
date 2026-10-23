@@ -4,9 +4,10 @@
 
 **Input**: `docs/specs/001-search/spec.md`
 
-Status: Setup and foundational runtime tasks T001-T007 are implemented. Provider adapters and search
-stories remain planned. Spec Kit reports logical branch `001-search`; the actual Git branch includes
-`feat-`.
+Status: Tasks T001-T014 are implemented through Phase 3. TMDB resolution and explicit selection are
+available; Exa execution and the remaining stories stay planned. Search operations remain pending
+after selection until Phase 4. Spec Kit reports logical branch `001-search`; the actual Git branch
+includes `feat-`.
 
 ## Summary
 
@@ -23,9 +24,11 @@ feature 1.
 
 **Language/Version**: TypeScript 7.0.2 and Bun 1.4.2, matching the repository.
 
-**Primary Dependencies**: Built-in `Bun.serve`, `bun:sqlite`, `fetch`, and `bun:test`; shared
-`@repo/typescript-config`; Bun type declarations as a development dependency. No new production
-package.
+**Primary Dependencies**: Built-in `Bun.serve`, `bun:sqlite`, `fetch`, and `bun:test`; Hono 4.13.13
+for routing and middleware, Zod 4.6.7 for boundary schemas, and neverthrow 8.2.0 for typed provider
+outcomes. Shared `@repo/typescript-config` and Bun type declarations remain development
+dependencies. `bun.lock` records the installed versions. The owner requested these additions on
+2026-10-23 to replace handwritten plumbing.
 
 **Storage**: Local SQLite, foreign keys, WAL, `synchronous=FULL`, numbered transactional SQL
 migrations.
@@ -110,22 +113,32 @@ apps/search/
   migrations/001_search.sql
   src/server.ts
   src/config.ts
+  src/body.ts
+  src/errors.ts
   src/db.ts
   src/search.ts
   src/worker.ts
   src/providers/tmdb.ts
   src/providers/exa.ts
   tests/fixtures/
+  tests/body.test.ts
   tests/search.test.ts
   tests/providers.test.ts
   tests/recovery.test.ts
   tests/live-acceptance.test.ts
 ```
 
-The foundation paths exist; story modules remain planned. The server owns HTTP validation; search
-owns submit/select/retry/read; the worker dispatches persistent operations; the database module owns
-migrations and transactions. Provider modules validate external responses. No repository/service
-class layers are needed.
+The foundation and US2 paths exist; Exa and later-story modules remain planned. The server owns HTTP
+validation; search owns submit/select/retry/read; the worker dispatches persistent operations; the
+database module owns migrations and transactions. Provider modules validate external responses. No
+repository/service class layers are needed.
+
+Hono owns route matching and shared access middleware. Zod validates submissions, selections,
+pagination, policy, and provider metadata without exposing raw validation errors. A shared bounded
+JSON reader enforces byte limits and strict UTF-8 for both HTTP and provider bodies. Provider
+adapters return neverthrow results for expected failures; SQLite transaction callbacks still throw
+on failure so rollback occurs before HTTP error handling. Candidate parsing stays in the provider
+module. Request summaries join selected work IDs and derive status through ordered rules.
 
 Implementation must also update workspace development dependencies and the Bun lockfile, replace the
 starter README with actual setup, ignore database/WAL/SHM files, and add app scripts for `dev`,

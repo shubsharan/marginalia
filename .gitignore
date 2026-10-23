@@ -11,6 +11,8 @@ node_modules
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*
+!.env.example
 
 # Local search storage, including custom database paths within the app
 apps/search/**/*.sqlite

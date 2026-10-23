@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,71 +49,42 @@ const METADATA_FIELDS = {
 
 type Provider = keyof typeof METADATA_FIELDS;
 
-export type MetadataPolicy = {
-  revision: string;
-  provider: Provider;
-  reviewedAt: string;
-  permissionBasis: string;
-  retainedFields: string[];
-  displayedFields: string[];
-};
+export const boundedText = (max: number) =>
+  z.string().refine((value) => value.trim().length > 0 && value.length <= max);
+export const calendarDateSchema = z.iso.date();
 
-type ProviderConfig = {
-  credential: string | null;
-  policy: MetadataPolicy | null;
-};
-
-export type Config = {
-  databasePath: string;
-  providers: Record<Provider, ProviderConfig>;
-};
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function boundedString(value: unknown, max: number): value is string {
-  return typeof value === "string" && value.trim().length > 0 && value.length <= max;
-}
-
-function fieldList(value: unknown, allowed: readonly string[]): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.length <= allowed.length &&
-    value.every((field) => typeof field === "string" && allowed.includes(field)) &&
-    new Set(value).size === value.length
+const metadataPolicySchema = z
+  .object({
+    revision: boundedText(LIMITS.maxNoticeIdChars),
+    provider: z.enum(["tmdb", "exa"]),
+    reviewedAt: calendarDateSchema.refine((date) => date <= new Date().toISOString().slice(0, 10)),
+    permissionBasis: boundedText(LIMITS.maxUrlChars),
+    retainedFields: z.array(z.string()).max(METADATA_FIELDS.tmdb.length),
+    displayedFields: z.array(z.string()).max(METADATA_FIELDS.tmdb.length),
+  })
+  .refine(
+    (policy) =>
+      policy.retainedFields.every((field) => METADATA_FIELDS[policy.provider].includes(field)) &&
+      new Set(policy.retainedFields).size === policy.retainedFields.length &&
+      policy.displayedFields.every((field) => policy.retainedFields.includes(field)) &&
+      new Set(policy.displayedFields).size === policy.displayedFields.length,
   );
-}
+const policyDocumentSchema = z.object({
+  revision: z.unknown(),
+  providers: z.record(z.string(), z.unknown()),
+});
+
+export type MetadataPolicy = z.infer<typeof metadataPolicySchema>;
+type ProviderConfig = { credential: string | null; policy: MetadataPolicy | null };
+export type Config = { databasePath: string; providers: Record<Provider, ProviderConfig> };
 
 function parsePolicy(document: unknown, provider: Provider): MetadataPolicy | null {
-  if (
-    !isObject(document) ||
-    !boundedString(document.revision, LIMITS.maxNoticeIdChars) ||
-    !isObject(document.providers)
-  )
-    return null;
-  const entry = document.providers[provider];
-  if (
-    !isObject(entry) ||
-    entry.provider !== provider ||
-    typeof entry.reviewedAt !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(entry.reviewedAt) ||
-    !Number.isFinite(Date.parse(entry.reviewedAt)) ||
-    new Date(entry.reviewedAt).toISOString().slice(0, 10) !== entry.reviewedAt ||
-    entry.reviewedAt > new Date().toISOString().slice(0, 10) ||
-    !boundedString(entry.permissionBasis, LIMITS.maxUrlChars) ||
-    !fieldList(entry.retainedFields, METADATA_FIELDS[provider]) ||
-    !fieldList(entry.displayedFields, entry.retainedFields)
-  )
-    return null;
-  return {
-    revision: document.revision,
-    provider,
-    reviewedAt: entry.reviewedAt,
-    permissionBasis: entry.permissionBasis,
-    retainedFields: entry.retainedFields,
-    displayedFields: entry.displayedFields,
-  };
+  const parsed = policyDocumentSchema.safeParse(document);
+  if (!parsed.success) return null;
+  const entry = parsed.data.providers[provider];
+  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return null;
+  const result = metadataPolicySchema.safeParse({ ...entry, revision: parsed.data.revision });
+  return result.success && result.data.provider === provider ? result.data : null;
 }
 
 function readPolicy(path: string): unknown {

@@ -1,7 +1,13 @@
 # Local search API
 
-JSON API at `http://127.0.0.1:4310`. Phase 2 implements `GET /health`; the other routes remain
-planned. Public hosting and the full knowledge-query API are outside this feature.
+JSON API at `http://127.0.0.1:4310`. Phase 3 implements health, submission, request summary,
+candidate listing, and selection routes. The remaining routes are planned. Final selection queues
+search operations; Phase 4 adds their execution. Public hosting and the full knowledge-query API are
+outside this feature.
+
+Hono routes requests through shared access checks; Zod schemas validate boundary data. Validation
+responses expose field paths and local codes, never raw library errors or input values. Internal
+provider results do not change this JSON contract or SQLite rollback semantics.
 
 ## Access and configuration
 

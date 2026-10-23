@@ -7,6 +7,9 @@ import { join, relative } from "node:path";
 import { APP_DIRECTORY, LIMITS, loadConfig, providerReadiness } from "../src/config.ts";
 import { loadMigrations, migrateDatabase, openDatabase } from "../src/db.ts";
 import { startServer } from "../src/server.ts";
+import { createResolutionWorker } from "../src/worker.ts";
+import type { TmdbFetch } from "../src/providers/tmdb.ts";
+import tmdbFixtures from "./fixtures/tmdb.json" with { type: "json" };
 
 let directory: string;
 const databases = new Set<Database>();
@@ -745,5 +748,507 @@ describe("loopback HTTP foundation", () => {
       query.mockRestore();
       log.mockRestore();
     }
+  });
+});
+
+function resolutionSetup(fetcher: TmdbFetch = async () => Response.json(tmdbFixtures.movies)) {
+  const { db, path } = database();
+  const policy = reviewedPolicy();
+  policy.providers.tmdb.retainedFields = [
+    "id",
+    "title",
+    "name",
+    "original_title",
+    "original_name",
+    "release_date",
+    "first_air_date",
+    "original_language",
+    "origin_country",
+  ];
+  policy.providers.tmdb.displayedFields = [...policy.providers.tmdb.retainedFields];
+  savePolicy(policy);
+  const configuration = config({ TMDB_READ_ACCESS_TOKEN: fakeSecret });
+  const server = startServer({ db, config: configuration, port: 0 });
+  servers.push(server);
+  const worker = createResolutionWorker({ db, config: configuration, fetch: fetcher });
+  async function api(route = "", body?: unknown) {
+    const response = await http(server, {
+      path: `/v1/search-requests${route}`,
+      method: body === undefined ? "GET" : "POST",
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      chunks: body === undefined ? [] : [JSON.stringify(body)],
+    });
+    return { status: response.status, body: JSON.parse(response.text) };
+  }
+  async function submit(inputs: unknown = [{ title: " Heat ", workType: "film" }]) {
+    const response = await api("", { inputs });
+    expect(response.status).toBe(202);
+    return response.body.requestId as string;
+  }
+  async function summary(id: string) {
+    return (await api(`/${id}`)).body;
+  }
+  async function candidates(id: string, inputId: string, query = "") {
+    return api(`/${id}/inputs/${inputId}/candidates${query}`);
+  }
+  return { db, path, configuration, server, worker, api, submit, summary, candidates };
+}
+
+describe("US2 submission and explicit selection", () => {
+  test("selection storage failure rolls back writes before reaching Hono error handling", async () => {
+    const s = resolutionSetup(async () => Response.json(tmdbFixtures.translated));
+    const id = await s.submit();
+    await s.worker.runOnce();
+    const input = (await s.summary(id)).inputs[0];
+    const candidate = (await s.candidates(id, input.id)).body.items[0];
+    s.db.run(
+      "CREATE TRIGGER reject_search BEFORE INSERT ON operations WHEN NEW.kind = 'search' BEGIN SELECT RAISE(ABORT, 'fake-secret-must-never-be-output'); END",
+    );
+    const before = s.db.serialize();
+    const result = await s.api(`/${id}/selections`, {
+      selections: [{ inputId: input.id, candidateId: candidate.id }],
+    });
+    expect(result.status).toBe(503);
+    expect(result.body.error.code).toBe("storage_unavailable");
+    expect(JSON.stringify(result.body)).not.toContain(fakeSecret);
+    expect(s.db.serialize()).toEqual(before);
+  });
+
+  test("Zod issue paths stay useful without exposing unknown keys or raw errors", async () => {
+    const s = resolutionSetup();
+    const invalidYear = await s.api("", { inputs: [{ title: "Heat", year: null }] });
+    expect(invalidYear.body.error.details).toEqual(["inputs[0].year"]);
+    const unknown = await s.api("", { inputs: [{ title: "Heat" }], [fakeSecret]: true });
+    expect(unknown.status).toBe(422);
+    expect(JSON.stringify(unknown.body)).not.toContain(fakeSecret);
+    expect(s.db.query("SELECT count(*) n FROM search_requests").get()).toEqual({ n: 0 });
+  });
+
+  test("Hono applies access controls before parsing every mutation route", async () => {
+    const s = resolutionSetup();
+    for (const path of ["/v1/search-requests", "/v1/search-requests/unknown/selections"]) {
+      const result = await http(s.server, {
+        path,
+        method: "POST",
+        headers: { Host: "evil.example", Origin: "http://evil.example" },
+        chunks: ["not json"],
+      });
+      expect(result.status).toBe(403);
+      expect(result.headers["x-content-type-options"]).toBe("nosniff");
+      expect(result.headers["cache-control"]).toBe("no-store");
+      expect(result.headers["access-control-allow-origin"]).toBeUndefined();
+    }
+    const unknown = await http(s.server, { path: "/unknown?query=x" });
+    expect(unknown.status).toBe(404);
+    expect((await http(s.server, { method: "HEAD" })).status).toBe(404);
+    expect(s.db.query("SELECT count(*) n FROM search_requests").get()).toEqual({ n: 0 });
+  });
+
+  test("film/TV collisions stay distinct, reselection works before freeze, and repeated requests reuse first-selected snapshots", async () => {
+    let changed = false;
+    const s = resolutionSetup(async (url) =>
+      Response.json(
+        changed
+          ? { results: [{ id: 949, title: "Later label" }] }
+          : url.pathname.endsWith("tv")
+            ? tmdbFixtures.tv
+            : tmdbFixtures.movies,
+      ),
+    );
+    const id = await s.submit([{ title: "Heat", workType: "film" }, { title: "Heat" }]);
+    await s.worker.runOnce();
+    await s.worker.runOnce();
+    const [a, b] = (await s.summary(id)).inputs;
+    const movies = (await s.candidates(id, a.id)).body.items;
+    const mixed = (await s.candidates(id, b.id)).body.items;
+    expect(
+      (
+        await s.api(`/${id}/selections`, {
+          selections: [{ inputId: a.id, candidateId: movies[1].id }],
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await s.api(`/${id}/selections`, {
+          selections: [{ inputId: a.id, candidateId: movies[0].id }],
+        })
+      ).status,
+    ).toBe(200);
+    const television = mixed.find(
+      (c: { providerMediaType: string }) => c.providerMediaType === "tv",
+    );
+    expect(
+      (
+        await s.api(`/${id}/selections`, {
+          selections: [{ inputId: b.id, candidateId: television.id }],
+        })
+      ).status,
+    ).toBe(200);
+    const frozen = await s.summary(id);
+    expect(frozen.distinctWorkCount).toBe(2);
+    expect(frozen.inputs[0].workId).not.toBe(frozen.inputs[1].workId);
+    expect(s.db.query("SELECT count(*) n FROM operations WHERE kind = 'search'").get()).toEqual({
+      n: 2,
+    });
+    changed = true;
+    const second = await s.submit();
+    await s.worker.runOnce();
+    const input = (await s.summary(second)).inputs[0];
+    const c = (await s.candidates(second, input.id)).body.items[0];
+    expect(c.title).toBe("Later label");
+    expect(
+      (
+        await s.api(`/${second}/selections`, {
+          selections: [{ inputId: input.id, candidateId: c.id }],
+        })
+      ).status,
+    ).toBe(200);
+    expect((await s.summary(second)).inputs[0].workId).toBe(frozen.inputs[0].workId);
+    expect(s.db.query("SELECT title FROM works WHERE id = ?").get(frozen.inputs[0].workId)).toEqual(
+      { title: "Heat" },
+    );
+  });
+
+  test("publication rolls back entirely on storage failure and external calls run outside transactions", async () => {
+    const s = resolutionSetup(async () => {
+      expect(s.db.inTransaction).toBe(false);
+      return Response.json(tmdbFixtures.movies);
+    });
+    const id = await s.submit();
+    s.db.run(
+      "CREATE TRIGGER fail_second_candidate BEFORE INSERT ON resolution_candidates WHEN NEW.ordinal = 1 BEGIN SELECT RAISE(ABORT, 'fake-secret-must-never-be-output'); END",
+    );
+    await s.worker.runOnce();
+    expect(s.db.query("SELECT count(*) n FROM resolution_candidates").get()).toEqual({ n: 0 });
+    const summary = await s.summary(id);
+    expect(summary.status).toBe("blocked");
+    expect(JSON.stringify(summary)).toContain("storage_unavailable");
+    expect(JSON.stringify(summary)).not.toContain(fakeSecret);
+  });
+
+  test("read and mutation storage failures return safe 503 errors", async () => {
+    const s = resolutionSetup();
+    const id = await s.submit();
+    close(s.db);
+    for (const response of [
+      await s.api(`/${id}`),
+      await s.api("", { inputs: [{ title: "Heat" }] }),
+    ]) {
+      expect(response.status).toBe(503);
+      expect(response.body.error.code).toBe("storage_unavailable");
+    }
+  });
+
+  test("automatic dispatch and shutdown cancel active resolution into interrupted state", async () => {
+    let began!: () => void;
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    const s = resolutionSetup();
+    const worker = createResolutionWorker({
+      db: s.db,
+      config: s.configuration,
+      fetch: async (_url, init) => {
+        began();
+        return new Promise<Response>((_resolve, reject) =>
+          init.signal?.addEventListener("abort", () => reject(new Error(fakeSecret)), {
+            once: true,
+          }),
+        );
+      },
+    });
+    const id = await s.submit();
+    worker.start();
+    try {
+      await started;
+      expect((await s.summary(id)).status).toBe("resolving");
+    } finally {
+      await worker.stop();
+    }
+    expect((await s.summary(id)).inputs[0].state).toBe("interrupted");
+    expect(s.db.query("SELECT state, error_code FROM operation_attempts").get()).toEqual({
+      state: "interrupted",
+      error_code: "operation_interrupted",
+    });
+    expect(await worker.runOnce()).toBe(false);
+  });
+
+  test("a superseded attempt cannot publish even while its own deadline remains valid", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const s = resolutionSetup(async () => {
+      await gate;
+      return Response.json(tmdbFixtures.movies);
+    });
+    await s.submit();
+    const active = s.worker.runOnce();
+    const op = s.db.query<{ id: string }, []>("SELECT id FROM operations").get();
+    expect(op).not.toBeNull();
+    if (!op) throw new Error("Expected claimed operation");
+    const newer = crypto.randomUUID();
+    s.db.run(
+      "INSERT INTO operation_attempts (id, operation_id, attempt_number, provider, query, template_version, started_at, deadline_at) VALUES (?, ?, 2, 'tmdb', 'Heat', 'tmdb-search-v1', ?, ?)",
+      [newer, op.id, new Date().toISOString(), new Date(Date.now() + 60_000).toISOString()],
+    );
+    s.db.run("UPDATE operations SET current_attempt_id = ?", [newer]);
+    release();
+    await active;
+    expect(s.db.query("SELECT count(*) n FROM resolution_candidates").get()).toEqual({ n: 0 });
+    expect(s.db.query("SELECT state, current_attempt_id FROM operations").get()).toEqual({
+      state: "running",
+      current_attempt_id: newer,
+    });
+  });
+
+  test("invalid submissions cause no writes or calls, with input-specific errors", async () => {
+    let calls = 0;
+    const s = resolutionSetup(async () => {
+      calls++;
+      return Response.json(tmdbFixtures.movies);
+    });
+    for (const body of [
+      {},
+      { inputs: [] },
+      { inputs: Array(21).fill({ title: "Heat" }) },
+      { inputs: [{ title: " " }] },
+      { inputs: [{ title: "x".repeat(301) }] },
+      { inputs: [{ title: "Heat", year: null }] },
+      { inputs: [{ title: "Heat", year: 1995.5 }] },
+      { inputs: [{ title: "Heat", year: 1799 }] },
+      { inputs: [{ title: "Heat", year: 2201 }] },
+      { inputs: [{ title: "Heat", workType: null }] },
+      { inputs: [{ title: "Heat", workType: "movie" }] },
+      { inputs: [{ title: "Heat", extra: true }] },
+      { inputs: [{ title: "Heat" }], secret: fakeSecret },
+      { inputs: [{ title: "Good" }, { title: false }] },
+    ]) {
+      const response = await s.api("", body);
+      expect(response.status).toBe(422);
+      expect(response.body.error.details.length).toBeGreaterThan(0);
+      expect(JSON.stringify(response.body)).not.toContain(fakeSecret);
+    }
+    expect(s.db.query("SELECT count(*) n FROM search_requests").get()).toEqual({ n: 0 });
+    expect(await s.worker.runOnce()).toBe(false);
+    expect(calls).toBe(0);
+    const id = await s.submit(Array(20).fill({ title: " Heat ", year: 1995, workType: "film" }));
+    const summary = await s.summary(id);
+    expect(summary.inputs).toHaveLength(20);
+    expect(summary.inputs[0]).toMatchObject({
+      originalTitle: " Heat ",
+      title: "Heat",
+      state: "pending",
+    });
+  });
+
+  test("singleton needs confirmation; decline, reselection and invalid batches are atomic", async () => {
+    const s = resolutionSetup(async () => Response.json(tmdbFixtures.translated));
+    const id = await s.submit([
+      { title: "Spirited Away", workType: "film" },
+      { title: "Sen to Chihiro", workType: "film" },
+    ]);
+    await s.worker.runOnce();
+    await s.worker.runOnce();
+    const summary = await s.summary(id);
+    expect(summary.status).toBe("needs_input");
+    const [first, second] = summary.inputs;
+    const a = (await s.candidates(id, first.id)).body.items[0];
+    const b = (await s.candidates(id, second.id)).body.items[0];
+    expect(a).toMatchObject({
+      provider: "tmdb",
+      providerMediaType: "movie",
+      providerId: 129,
+      eligible: true,
+      identityUrl: "https://www.themoviedb.org/movie/129",
+    });
+    expect(a.attemptId).toBeString();
+    expect(a.retrievedAt).toBeString();
+    expect(summary.distinctWorkCount).toBe(0);
+    expect(s.db.query("SELECT count(*) n FROM operations WHERE kind = 'search'").get()).toEqual({
+      n: 0,
+    });
+    expect(
+      (await s.api(`/${id}/selections`, { selections: [{ inputId: first.id, candidateId: null }] }))
+        .status,
+    ).toBe(200);
+    expect((await s.summary(id)).inputs[0]).toMatchObject({
+      state: "unresolved",
+      unresolvedReason: "declined",
+    });
+    for (const selections of [
+      [
+        { inputId: first.id, candidateId: a.id },
+        { inputId: second.id, candidateId: a.id },
+      ],
+      [
+        { inputId: first.id, candidateId: a.id },
+        { inputId: first.id, candidateId: a.id },
+      ],
+      [{ inputId: first.id, candidateId: a.id, extra: true }],
+    ]) {
+      const before = s.db.serialize();
+      expect((await s.api(`/${id}/selections`, { selections })).status).toBeGreaterThanOrEqual(400);
+      expect(s.db.serialize()).toEqual(before);
+    }
+    expect(
+      (await s.api(`/${id}/selections`, { selections: [{ inputId: first.id, candidateId: a.id }] }))
+        .status,
+    ).toBe(200);
+    const finalBody = { selections: [{ inputId: second.id, candidateId: b.id }] };
+    const final = await Promise.all([
+      s.api(`/${id}/selections`, finalBody),
+      s.api(`/${id}/selections`, finalBody),
+    ]);
+    expect(final.map((r) => r.status).sort()).toEqual([200, 409]);
+    const frozen = await s.summary(id);
+    expect(frozen).toMatchObject({ status: "searching", distinctWorkCount: 1 });
+    expect(frozen.inputs[0].workId).toBe(frozen.inputs[1].workId);
+    expect(s.db.query("SELECT count(*) n FROM request_works").get()).toEqual({ n: 1 });
+    expect(
+      s.db
+        .query("SELECT count(*) n FROM operations WHERE kind = 'search' AND state = 'pending'")
+        .get(),
+    ).toEqual({ n: 1 });
+    expect(await s.worker.runOnce()).toBe(false);
+    close(s.db);
+    const reopened = openDatabase(s.path);
+    databases.add(reopened);
+    expect(reopened.query("SELECT frozen_at FROM search_requests WHERE id = ?").get(id)).toEqual({
+      frozen_at: frozen.frozenAt,
+    });
+    expect(
+      reopened.query("SELECT selected_candidate_id FROM title_inputs ORDER BY position").all(),
+    ).toEqual([{ selected_candidate_id: a.id }, { selected_candidate_id: b.id }]);
+    const offline = startServer({ db: reopened, config: config(), port: 0 });
+    servers.push(offline);
+    const saved = await http(offline, { path: `/v1/search-requests/${id}` });
+    expect(saved.status).toBe(200);
+    expect(JSON.parse(saved.text)).toEqual(frozen);
+  });
+
+  test("conflicting and unmatched inputs remain explicit and ineligible selections change nothing", async () => {
+    const s = resolutionSetup();
+    const id = await s.submit([{ title: "Heat", year: 2000, workType: "film" }]);
+    await s.worker.runOnce();
+    const summary = await s.summary(id);
+    expect(summary.inputs[0]).toMatchObject({
+      state: "unresolved",
+      unresolvedReason: "conflicting_details",
+    });
+    const c = (await s.candidates(id, summary.inputs[0].id)).body.items[0];
+    const before = s.db.serialize();
+    expect(
+      (
+        await s.api(`/${id}/selections`, {
+          selections: [{ inputId: summary.inputs[0].id, candidateId: c.id }],
+        })
+      ).status,
+    ).toBe(409);
+    expect(s.db.serialize()).toEqual(before);
+    const empty = resolutionSetup(async () => Response.json({ results: [] }));
+    const emptyId = await empty.submit();
+    await empty.worker.runOnce();
+    expect((await empty.summary(emptyId)).inputs[0]).toMatchObject({
+      state: "unresolved",
+      unresolvedReason: "no_match",
+    });
+  });
+
+  test("one failing endpoint publishes no candidates; saved failures are readable and secret-free", async () => {
+    let calls = 0;
+    const s = resolutionSetup(async () =>
+      ++calls === 1
+        ? Response.json(tmdbFixtures.movies)
+        : Response.json({ error: fakeSecret }, { status: 401 }),
+    );
+    const id = await s.submit([{ title: "Heat" }]);
+    await s.worker.runOnce();
+    expect(s.db.query("SELECT count(*) n FROM resolution_candidates").get()).toEqual({ n: 0 });
+    const response = await s.api(`/${id}`);
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe("blocked");
+    expect(response.body.nextActions).toContainEqual(
+      expect.objectContaining({ action: "configure_credentials" }),
+    );
+    expect(s.db.serialize().includes(Buffer.from(fakeSecret))).toBe(false);
+    expect(JSON.stringify(response.body)).not.toContain(fakeSecret);
+  });
+
+  test("scoped candidate cursors reject invalid queries, stay bounded and apply current display policy", async () => {
+    const s = resolutionSetup();
+    const id = await s.submit();
+    await s.worker.runOnce();
+    const inputId = (await s.summary(id)).inputs[0].id;
+    const page = await s.candidates(id, inputId, "?limit=1");
+    expect(page.body.items).toHaveLength(1);
+    expect(page.body.nextCursor).toBeString();
+    const next = await s.candidates(
+      id,
+      inputId,
+      `?limit=2&cursor=${encodeURIComponent(page.body.nextCursor)}`,
+    );
+    expect(next.body.items).toHaveLength(2);
+    expect(next.body.nextCursor).toBeNull();
+    expect(next.body.snapshotAt).toBe(page.body.snapshotAt);
+    for (const query of [
+      "?limit=0",
+      "?limit=101",
+      "?limit=1.5",
+      "?cursor=bad",
+      "?other=x",
+      "?limit=1&limit=2",
+    ]) {
+      expect((await s.candidates(id, inputId, query)).status).toBe(400);
+    }
+    const other = await s.submit();
+    await s.worker.runOnce();
+    const otherInput = (await s.summary(other)).inputs[0].id;
+    expect(
+      (await s.candidates(other, otherInput, `?cursor=${encodeURIComponent(page.body.nextCursor)}`))
+        .status,
+    ).toBe(400);
+    expect((await s.candidates(other, inputId)).status).toBe(404);
+    s.configuration.providers.tmdb.policy = null;
+    const restricted = (await s.candidates(id, inputId)).body.items[0];
+    expect(restricted.title).toBeNull();
+    expect(restricted.restrictedFields).toContain("title");
+    expect(restricted.providerId).toBeNull();
+    expect((await s.summary(id)).inputs[0].id).toBe(inputId);
+  });
+
+  test("capacity limits reject submissions and final selection without partial writes", async () => {
+    const s = resolutionSetup(async () => Response.json(tmdbFixtures.translated));
+    const waiting = await s.submit();
+    await s.worker.runOnce();
+    const inputId = (await s.summary(waiting)).inputs[0].id;
+    const candidateId = (await s.candidates(waiting, inputId)).body.items[0].id;
+    for (let i = 0; i < 20; i++) await s.submit();
+    let before = s.db.serialize();
+    expect((await s.api("", { inputs: [{ title: "Overflow" }] })).status).toBe(429);
+    expect(s.db.serialize()).toEqual(before);
+    before = s.db.serialize();
+    expect(
+      (await s.api(`/${waiting}/selections`, { selections: [{ inputId, candidateId }] })).status,
+    ).toBe(429);
+    expect(s.db.serialize()).toEqual(before);
+  });
+
+  test("stale resolution attempts cannot publish late results", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const s = resolutionSetup(async () => {
+      await gate;
+      return Response.json(tmdbFixtures.movies);
+    });
+    await s.submit();
+    const running = s.worker.runOnce();
+    s.db.run("UPDATE operation_attempts SET deadline_at = '2000-01-01T00:00:00Z'");
+    release();
+    await running;
+    expect(s.db.query("SELECT count(*) n FROM resolution_candidates").get()).toEqual({ n: 0 });
   });
 });

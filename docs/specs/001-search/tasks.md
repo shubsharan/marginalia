@@ -7,13 +7,17 @@
 [provider contract](contracts/providers.md), and [quickstart.md](quickstart.md). Follow
 `.specify/memory/constitution.md` version 3.0.0.
 
-**Status**: Phases 1 and 2 complete. On 2026-10-23, Bun 1.4.2 passed 43 foundational tests and 156
-assertions against temporary databases and loopback HTTP servers. Checks cover configuration and
-policy, migration rollback and schema compatibility, retained identities and observations, ownership
-constraints, missing schema columns and integrity triggers, HTTP access and body limits, rejection
-of declared and streamed read-method bodies, and secret redaction. App type-check, repository lint,
-formatting, and diff checks passed. Evidence applies to the uncommitted Phase 2 changes based on
-`c7ba52e`. Provider execution, search stories, and SC-001 through SC-006 acceptance remain NOT RUN.
+**Status**: Phases 1 through 3 complete. On 2026-10-23, Bun 1.4.2 passed 82 tests and 408 assertions
+against sanitized fixtures, temporary databases, and loopback HTTP servers. US2 checks cover bounded
+TMDB resolution, explicit selection, atomic publication and freeze, identity reuse, candidate
+pagination, capacity limits, cancellation, attempt ownership, and saved selections after reopen. All
+43 foundational tests still pass. The owner-requested Hono, Zod, and neverthrow refactor also checks
+shared stream cancellation and UTF-8, safe schema errors, routing access controls, and selection
+rollback after a storage failure. Frozen dependency installation, app type-check, repository lint,
+formatting, and diff checks passed. Evidence applies to the uncommitted Phase 3 changes based on
+`23227de`; [quickstart.md](quickstart.md) records the implementation snapshot. Live provider
+compatibility and identity quality, Exa execution, crash recovery, and SC-001 through SC-006
+acceptance remain NOT RUN.
 
 **Tests**: Tasks implement the specification's independent tests, acceptance scenarios, and SC-001
 through SC-006 using the suites selected in the plan. Write each story's checks before its
@@ -30,8 +34,9 @@ not an automatic-selection shortcut.
 - `[P]` identifies tasks that can run together within the dependency group stated below. It does not
   waive earlier phase prerequisites or permit concurrent edits to the same file.
 - Paths are relative to the repository root. Runtime code belongs in `apps/search/`.
-- Reuse Bun, SQLite, native fetch, existing workspace globs, and shared TypeScript configuration. Do
-  not introduce a framework, ORM, queue service, general provider layer, or new production package.
+- Reuse Bun, SQLite, native fetch, existing workspace globs, and shared TypeScript configuration.
+  Use the owner-approved Hono, Zod, and neverthrow packages for routing, validation, and expected
+  provider failures. Do not add an ORM, queue service, or general provider layer.
 - Keep provider request/response types in their provider modules and database operations in the
   planned modules. Do not create placeholder layers to make tasks appear independent.
 
@@ -98,7 +103,7 @@ execution.
 
 ### Tests
 
-- [ ] T008 [P] [US2] Add sanitized TMDB fixtures in `apps/search/tests/fixtures/tmdb.json` and
+- [x] T008 [P] [US2] Add sanitized TMDB fixtures in `apps/search/tests/fixtures/tmdb.json` and
       provider checks in `apps/search/tests/providers.test.ts` for remakes,
       translated/alternative-title matches, movie/TV numeric-ID collisions,
       missing/invalid/conflicting dates, one versus two search requests, deterministic capped
@@ -107,7 +112,7 @@ execution.
       overviews, images, raw responses, or fabricated revisions. Assert `redirect: "error"` and
       verify with local redirect endpoints and a fake token that the operation fails without any
       request reaching the redirect destination.
-- [ ] T009 [P] [US2] Add submission and selection contract checks in
+- [x] T009 [P] [US2] Add submission and selection contract checks in
       `apps/search/tests/search.test.ts`: invalid/empty/over-limit inputs cause no writes or
       provider calls, 20 inputs succeed, singleton candidates still require confirmation, decline
       remains unresolved, wrong-input/ineligible/duplicate selections and partially invalid batches
@@ -116,31 +121,31 @@ execution.
 
 ### Implementation
 
-- [ ] T010 [US2] Implement bounded TMDB resolution in `apps/search/src/providers/tmdb.ts` using
+- [x] T010 [US2] Implement bounded TMDB resolution in `apps/search/src/providers/tmdb.ts` using
       injected fetch and movie/TV search-result metadata as specified in `contracts/providers.md`.
       Enforce namespaced provider identities, local year eligibility, response validation, the
       20-candidate cap, per-endpoint coverage, metadata policy, and safe failures. Make one call for
       a supplied type or two when omitted; require both to succeed before publication, never hydrate
       details or auto-select a candidate.
-- [ ] T011 [US2] Implement request submission, candidate publication, selection, and decline in
+- [x] T011 [US2] Implement request submission, candidate publication, selection, and decline in
       `apps/search/src/search.ts`. Validate the entire submission before mutation; preserve original
       inputs; reuse work identities by provider/media-type/ID while keeping local UUIDs and
       first-selected snapshots; atomically validate selection ownership, freeze the fully resolved
       set, and queue one search operation per distinct work. Preserve duplicate input mappings,
       allow reselection before freeze, and reject changes after freeze or capacity overflow without
       partial writes.
-- [ ] T012 [US2] Implement durable resolution dispatch in `apps/search/src/worker.ts`:
+- [x] T012 [US2] Implement durable resolution dispatch in `apps/search/src/worker.ts`:
       transactionally claim one pending operation, create a unique attempt with a 60-second
       deadline, make external calls outside transactions, and publish candidates or safe failures
       only while that attempt still owns the running operation and is unexpired. Wire resolution to
       `src/providers/tmdb.ts` and `src/search.ts`; do not claim search operations until their
       handler is added in T019.
-- [ ] T013 [US2] Wire submission, request summary, candidate listing, and selection routes in
+- [x] T013 [US2] Wire submission, request summary, candidate listing, and selection routes in
       `apps/search/src/server.ts` to `apps/search/src/search.ts` with the exact response/status
       semantics in `contracts/search-api.md`. Add scoped cursor pagination for candidates and expose
       unresolved reasons, eligibility, provenance, coverage caps, and required actions; start the
       resolution worker after readiness.
-- [ ] T014 [US2] Run the US2 checks in `apps/search/tests/providers.test.ts` and
+- [x] T014 [US2] Run the US2 checks in `apps/search/tests/providers.test.ts` and
       `apps/search/tests/search.test.ts`; verify selection survives database reopen, unsafe
       selections leave all prior state unchanged, and final selection queues search exactly once.
       Record the result and implementation revision in `docs/specs/001-search/quickstart.md` without

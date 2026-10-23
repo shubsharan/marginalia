@@ -71,8 +71,10 @@ provenance. These licensing conditions do not confer rights over research-source
 
 - Decision: Add one `apps/search` workspace using repository-pinned Bun 1.4.2 and TypeScript 7.0.2.
   Use `Bun.serve`, `bun:sqlite`, native `fetch`, and `bun:test`. Reuse shared TypeScript settings
-  and the installed formatter and linter. No HTTP framework, ORM, queue service, or new production
-  package.
+  and the installed formatter and linter. On 2026-10-23, the owner requested Hono for routing, Zod
+  for boundary schemas, and neverthrow for expected provider failures. These replace the earlier
+  decision to avoid all production packages. No ORM, queue service, or general provider layer is
+  added.
 - Rationale: The trusted local developer needs durable writes and JSON reads. Bun includes the
   required [HTTP server](https://bun.sh/docs/runtime/http/server) and
   [SQLite driver](https://bun.sh/docs/runtime/sqlite). A single application owns the workflow.
@@ -84,6 +86,11 @@ Use foreign keys, WAL, and `synchronous=FULL`, checking the effective values. SQ
 durability tradeoff in its [PRAGMA reference](https://www.sqlite.org/pragma.html). Apply numbered
 SQL migrations and their version records in transactions. Reject a newer unknown schema. Never
 recreate storage on an upgrade error. Keep external calls outside write transactions.
+
+Use neverthrow results at provider and body-reading boundaries. Keep transaction callbacks
+exception-based: returning an error result is a normal return and would commit prior writes. The
+deterministic suite verifies that a failing final-selection write rolls back the selection, work
+identity, membership, and queued operation before Hono returns a safe storage error.
 
 ## Durable operations make retries precise
 
