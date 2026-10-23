@@ -1,9 +1,9 @@
 # Local search API
 
-JSON API at `http://127.0.0.1:4310`. Phase 4 implements health, submission, request summary,
+JSON API at `http://127.0.0.1:4310`. Phase 5 implements health, submission, request summary,
 candidate listing, selection, search execution, saved lists, stable work/source reads, and paginated
-source observations. Retry remains planned for Phase 5. Public hosting and the full knowledge-query
-API are outside this feature.
+source observations, retry, and recovery. Public hosting and the full knowledge-query API are
+outside this feature.
 
 Hono routes requests through shared access checks; Zod schemas validate boundary data. Validation
 responses expose field paths and local codes, never raw library errors or input values. Internal
@@ -87,8 +87,9 @@ Selection batches contain 1-20 unique input IDs; `candidateId: null` means decli
 ownership and eligibility before mutation. One invalid choice rejects the whole batch. The final
 selection freezes memberships and queues search atomically. Frozen selections cannot change.
 
-Retry arrays contain at most 20 unique operation IDs in this request. Explicit succeeded, active, or
-not-yet-due operations produce `409 operation_not_retryable` without changes. `{}` selects only due
+Retry bodies are `{}` or `{"operationIds":["..."]}`. Responses contain `queuedOperationIds`. Retry
+arrays contain 1-20 unique operation IDs in this request. Explicit succeeded, active, or not-yet-due
+operations produce `409 operation_not_retryable` without changes. `{}` selects only due
 failed/interrupted operations. Unknown IDs return 404. Repeated retry requests never restart
 completed work. Configuration must be corrected before an affected retry can succeed.
 

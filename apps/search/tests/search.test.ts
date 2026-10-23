@@ -821,6 +821,189 @@ function searchSetup(
   return { ...s, calls, confirm };
 }
 
+describe("US3 failure status and selective retry", () => {
+  test("partial success retries only the failure and preserves completed observations", async () => {
+    let failing = true;
+    const s = searchSetup(async (_url, init) => {
+      if (String(init.body).includes("Arrival") && failing)
+        return new Response(fakeSecret, { status: 429, headers: { "Retry-After": "120" } });
+      return Response.json({ results: [{ url: "https://example.com/shared" }] });
+    });
+    const id = await s.submit([
+      { title: "Heat", workType: "film" },
+      { title: "Arrival", workType: "film" },
+    ]);
+    await s.worker.runOnce();
+    await s.worker.runOnce();
+    await s.confirm(id);
+    await s.worker.runOnce();
+    const original = s.db.query("SELECT * FROM source_observations").all();
+    await s.worker.runOnce();
+    const summary = await s.summary(id);
+    expect(summary.status).toBe("partial");
+    expect(summary.coverage.map((o: { state: string }) => o.state)).toEqual([
+      "sources_found",
+      "failed",
+    ]);
+    const action = summary.nextActions[0];
+    expect(action).toMatchObject({
+      action: "retry_operation",
+      errorCode: "provider_rate_limit",
+      workId: summary.coverage[1].workId,
+    });
+    expect(Date.parse(action.retryAt) - Date.now()).toBeGreaterThan(110_000);
+    expect(JSON.stringify(summary)).not.toContain(fakeSecret);
+    const before = s.db.serialize();
+    expect((await s.api(`/${id}/retry`, { operationIds: [action.operationId] })).status).toBe(409);
+    expect((await s.api(`/${id}/retry`, {})).body).toEqual({ queuedOperationIds: [] });
+    expect(s.db.serialize()).toEqual(before);
+    s.db.run(
+      "UPDATE operation_attempts SET retry_at = ? WHERE error_code = 'provider_rate_limit'",
+      [new Date(Date.now() - 1).toISOString()],
+    );
+    const conflict = await s.api(`/${id}/retry`, {
+      operationIds: [action.operationId, summary.coverage[0].operationId],
+    });
+    expect(conflict.status).toBe(409);
+    expect(conflict.body.error.code).toBe("operation_not_retryable");
+    const results = await Promise.all([s.api(`/${id}/retry`, {}), s.api(`/${id}/retry`, {})]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 202]);
+    expect(results.flatMap((r) => r.body.queuedOperationIds)).toEqual([action.operationId]);
+    expect((await s.api(`/${id}/retry`, { operationIds: [action.operationId] })).status).toBe(409);
+    failing = false;
+    await s.worker.runOnce();
+    expect((await s.summary(id)).status).toBe("completed");
+    expect(await s.worker.runOnce()).toBe(false);
+    expect(s.calls).toHaveLength(3);
+    expect(s.db.query("SELECT * FROM source_observations ORDER BY seq LIMIT 1").all()).toEqual(
+      original,
+    );
+    expect(
+      s.db
+        .query(
+          "SELECT attempt_number, state FROM operation_attempts WHERE operation_id = ? ORDER BY attempt_number",
+        )
+        .all(action.operationId),
+    ).toEqual([
+      { attempt_number: 1, state: "failed" },
+      { attempt_number: 2, state: "succeeded" },
+    ]);
+    expect((await s.api(`/${id}/retry`, {})).status).toBe(200);
+  });
+
+  test("retry validates the entire explicit list, scope, capacity and storage atomically", async () => {
+    const s = resolutionSetup();
+    s.configuration.providers.tmdb.credential = null;
+    const id = await s.submit();
+    await s.worker.runOnce();
+    const action = (await s.summary(id)).nextActions[0];
+    expect(action).toMatchObject({
+      action: "configure_credentials",
+      errorCode: "provider_credentials",
+    });
+    const other = await s.submit();
+    const otherOp = s.db
+      .query<{ id: string }, [string]>("SELECT id FROM operations WHERE request_id = ?")
+      .get(other);
+    if (!otherOp) throw new Error("Expected operation");
+    for (const [body, status] of [
+      [{ operationIds: [action.operationId, "missing"] }, 404],
+      [{ operationIds: [action.operationId, otherOp.id] }, 404],
+      [{ operationIds: [action.operationId, action.operationId] }, 422],
+      [{ operationIds: [] }, 422],
+      [{ operationIds: Array(21).fill("x") }, 422],
+      [{ operationIds: null }, 422],
+      [{ extra: true }, 422],
+    ] as const) {
+      const before = s.db.serialize();
+      expect((await s.api(`/${id}/retry`, body)).status).toBe(status);
+      expect(s.db.serialize()).toEqual(before);
+    }
+    expect((await s.api("/missing/retry", {})).status).toBe(404);
+    expect((await s.api(`/${id}/retry?extra=1`, {})).status).toBe(400);
+    for (let i = 1; i < LIMITS.maxActiveRequests; i++) await s.submit();
+    const before = s.db.serialize();
+    expect((await s.api(`/${id}/retry`, {})).body.error.code).toBe("local_capacity");
+    expect(s.db.serialize()).toEqual(before);
+    s.db.run("UPDATE operations SET state = 'failed' WHERE request_id = ?", [other]);
+    s.db.run(
+      "CREATE TRIGGER fail_retry BEFORE UPDATE OF resolution_state ON title_inputs WHEN NEW.resolution_state = 'pending' BEGIN SELECT RAISE(ABORT, 'fake-secret-must-never-be-output'); END",
+    );
+    const retryBefore = s.db.serialize();
+    const response = await s.api(`/${id}/retry`, {});
+    expect(response.status).toBe(503);
+    expect(JSON.stringify(response.body)).not.toContain(fakeSecret);
+    expect(s.db.serialize()).toEqual(retryBefore);
+  });
+
+  test("resolution failures and required selections remain visible during resolving", async () => {
+    const s = resolutionSetup(async (url) =>
+      url.searchParams.get("query") === "Broken"
+        ? new Response(null, { status: 503 })
+        : Response.json(tmdbFixtures.movies),
+    );
+    const id = await s.submit([
+      { title: "Heat", workType: "film" },
+      { title: "Broken", workType: "film" },
+      { title: "Pending", workType: "film" },
+    ]);
+    await s.worker.runOnce();
+    const before = Date.now();
+    await s.worker.runOnce();
+    const summary = await s.summary(id);
+    expect(summary.status).toBe("resolving");
+    expect(summary.nextActions.map((a: { action: string }) => a.action)).toEqual([
+      "retry_operation",
+      "select_candidate",
+    ]);
+    expect(Date.parse(summary.nextActions[0].retryAt)).toBeGreaterThanOrEqual(
+      before + LIMITS.retryDelayMs,
+    );
+    expect((await s.api(`/${id}/retry`, {})).status).toBe(200);
+    await s.worker.runOnce();
+    expect((await s.summary(id)).status).toBe("blocked");
+  });
+
+  test.each([false, true])(
+    "provider-empty and all-rejected remain distinct successful outcomes, rejected=%s",
+    async (rejected) => {
+      const s = searchSetup(async () =>
+        Response.json({ results: rejected ? [{ url: "http://localhost/private" }] : [] }),
+      );
+      const id = await s.submit();
+      await s.worker.runOnce();
+      await s.confirm(id);
+      await s.worker.runOnce();
+      const summary = await s.summary(id);
+      expect(summary.status).toBe("completed");
+      expect(summary.coverage[0]).toMatchObject({
+        state: "no_sources",
+        returnedCount: rejected ? 1 : 0,
+        retainedCount: 0,
+        rejectedCount: rejected ? 1 : 0,
+      });
+      expect((await s.api(`/${id}/retry`, {})).status).toBe(200);
+      expect(s.calls).toHaveLength(1);
+    },
+  );
+
+  test("unmatched and declined inputs require clarification and cannot be technically retried", async () => {
+    const s = resolutionSetup(async () => Response.json({ results: [] }));
+    const id = await s.submit();
+    await s.worker.runOnce();
+    const summary = await s.summary(id);
+    expect(summary.inputs[0].unresolvedReason).toBe("no_match");
+    expect(summary.nextActions[0].action).toBe("submit_clarified_input");
+    expect((await s.api(`/${id}/retry`, {})).body).toEqual({ queuedOperationIds: [] });
+    await s.api(`/${id}/selections`, {
+      selections: [{ inputId: summary.inputs[0].id, candidateId: null }],
+    });
+    expect((await s.summary(id)).inputs[0].unresolvedReason).toBe("declined");
+    expect((await s.api(`/${id}/retry`, {})).status).toBe(200);
+    expect(await s.worker.runOnce()).toBe(false);
+  });
+});
+
 describe("US1 persisted source search", () => {
   test("source pagination freezes associations already present and excludes later work matches", async () => {
     const s = searchSetup();

@@ -1,9 +1,9 @@
 # Validate search
 
-This is the implementation acceptance guide. Phase 4 adds bounded Exa Search, atomic source
-publication, saved request/work/source reads, and paginated observations to the existing TMDB
-resolution and explicit-selection workflow. Retry, crash recovery, and full acceptance remain
-planned. No live provider or permission claim follows from the fixture results.
+This is the implementation acceptance guide. Phase 5 adds selective retry and crash recovery to the
+implemented TMDB resolution, explicit selection, Exa Search, and saved reads. Remaining metadata
+checks and full acceptance stay planned. No live provider or permission claim follows from the
+fixture results.
 
 ## Historical Phase 3 verification
 
@@ -105,6 +105,53 @@ edge-case acceptance remains pending. The root README now contains the actual se
 migration, confirmation, and saved-read workflow. Live TMDB/Exa compatibility, metadata permission
 review, relevance, and setup timing remain NOT RUN. SC-001 through SC-006 are each NOT RUN as full
 feature acceptance.
+
+## Phase 5 verification
+
+On 2026-10-23, Bun 1.4.2 passed 144 tests and 874 assertions across `body.test.ts`,
+`providers.test.ts`, `search.test.ts`, and `recovery.test.ts`. All providers use injected fixtures
+or loopback HTTP servers with fake credentials and temporary SQLite databases. Before
+implementation, retry checks failed with 404 and recovery checks timed out because expired attempts
+stayed running.
+
+Implementation revision: uncommitted Phase 5 changes based on
+`8a60851eaef42cf83ac45b1552c9fbfc63ccb330`. The implementation snapshot SHA-256 is
+`a4b78d70392442406ed6bf77e22532e7676751dd8f5089b4dda6730f406e1b4e`. It covers `.gitignore`,
+`bun.lock`, `apps/search/package.json`, `apps/search/src/**/*.ts`, `apps/search/tests/**/*.ts`, and
+`apps/search/tests/fixtures/**/*.json`, eighteen files total. Sort the paths and hash each UTF-8
+path, a NUL byte, its file bytes, and another NUL byte in sequence. No dependencies or schema
+changes were needed.
+
+The child-process check kills a worker with SIGKILL during a held HTTP call, reopens its persistent
+database, and verifies that committed observation IDs and values survive. Restart respects the
+original unexpired 60-second deadline and does not reissue that call. The test then advances the
+saved deadline to the past to exercise the one-second sweep without a minute-long wait. It does not
+measure 60 seconds of elapsed recovery time. Explicit retry completes the interrupted work; pending
+resolution resumes, and completed searches do not repeat.
+
+Separate surviving-worker checks release delayed success and failure responses for both resolution
+and search after a newer attempt completes. Database snapshots remain unchanged. Startup sweeps,
+read-time interruption, retry before the next sweep, and graceful cancellation before and after
+expiry also pass. Failed or interrupted attempts remain saved when retry queues another attempt.
+
+API checks cover partial success, provider-empty versus all-rejected success, resolution failures,
+rate limits and fallback delay, request ownership, completed or active operation rejection, early
+and concurrent retries, capacity, and atomic rollback on storage failure. All required actions
+remain visible even when summary precedence reports resolving. Completed observations retain their
+original IDs and values after selective retry. Provider date and fallback-header checks remain
+covered by the provider suite.
+
+`bun run --cwd apps/search test`, `bun run --cwd apps/search check-types`, `bun run lint`,
+`bun run format`, and `git diff --check` pass. README and quickstart shell examples pass `sh -n`.
+Ignore rules already cover dependencies, build output, logs, local environment files, and search
+database files. All sixteen checklist criteria remain checked and unmodified. Both implementation
+extension hooks are disabled, so no hook or automatic commit ran.
+
+A crash after provider receipt but before local commit can incur a repeated call and charge after
+retry. These checks establish local publication and recovery behavior, not exactly-once provider
+execution. Phase 6 metadata edge cases and Phase 7 acceptance remain pending. Live provider
+compatibility, retention/display permission review, relevance, and setup timing remain NOT RUN.
+SC-001 through SC-006 remain NOT RUN as full-feature acceptance criteria.
 
 ## Prerequisites
 
@@ -213,9 +260,8 @@ must remain unchanged and no search runs.
 
 ## Retry a failure
 
-This workflow remains planned for Phase 5. Its deterministic integration suite will supply one
-successful work search and one timeout. Inspect affected operation IDs, errors, counts, retry times,
-and next actions in the summary, then retry after the saved retry time. Dedicated operation-list,
+Phase 5 implements this workflow. Inspect affected operation IDs, errors, counts, retry times, and
+next actions in the summary, then retry after the saved retry time. Dedicated operation-list,
 attempt-history, and rejection-history endpoints are deferred.
 
 ```sh
@@ -228,6 +274,17 @@ curl --fail-with-body -sS \
 
 Expect only failed/interrupted operations to run. Successful work retains its IDs and observations.
 Unmatched or declined inputs require a clarified new request, not a technical retry.
+
+To select failures explicitly, send `{"operationIds":["operation-id-from-nextActions"]}`. Responses
+contain `queuedOperationIds`, with 202 when work is queued or 200 for an empty list. Explicit
+completed, active, or early operations return 409 without changes. Unknown or wrong-request IDs
+return 404. Invalid batches and capacity failures leave the entire request unchanged.
+
+At startup and every second, the worker closes expired attempts as interrupted. Reads also show
+expired work as interrupted before the sweep. Pending work resumes automatically; interrupted work
+requires explicit retry. Graceful shutdown interrupts active work. A crash after provider receipt
+but before local commit can cause another provider call and charge on retry. Local transactional
+publication does not guarantee exactly-once provider execution.
 
 ## Run deterministic checks
 
@@ -254,15 +311,15 @@ cases; later-phase rows remain planned:
 | Coverage             | Empty success differs from timeout/access/rate failures, all-invalid results, partial progress, and limit reached. Current candidates fit one response; growing saved result lists remain fully traversable.                                          |
 | Retry                | Only failed/interrupted work repeats, early retries fail, duplicate retries cannot create concurrent attempts, and completed associations never duplicate.                                                                                            |
 | Provider redirects   | Both provider adapters use `redirect: "error"`. Local redirect endpoints and fake credentials prove that redirects fail the operation and the destination receives no request.                                                                        |
-| Crash recovery       | Kill the child runtime during a held provider call, restart, wait for the 60-second deadline, and see interrupted status. Pending work resumes; explicit retry completes interrupted work while preserving committed results.                         |
+| Crash recovery       | Kill the child runtime during a held provider call, restart, verify the unexpired 60-second deadline, then advance its saved timestamp to test interruption. Pending work resumes; explicit retry preserves committed results.                        |
 | Stale responses      | In a separate test, keep the original worker alive with a delayed response, expire its attempt, and complete a newer attempt after retry. Release the old response and assert that it cannot change the newer attempt's status or saved results.      |
 | Storage              | Migration failure rolls back; changed checksum/newer schema fail startup; previously committed IDs/results survive. Storage write failures never return success.                                                                                      |
 | Local access/secrets | Remote bind is absent; invalid Host/Origin/content type is rejected; fake secrets injected into errors are absent from DB/log/output.                                                                                                                 |
 
 Use fetch injection and temporary databases in tests, not production endpoints that simulate
-failure. The planned recovery test launches a child process and controls provider responses;
-checking only in-memory state is insufficient. Database assertions check uniqueness and original
-observation retention.
+failure. The recovery test launches a child process and controls provider responses; checking only
+in-memory state is insufficient. Database assertions check uniqueness and original observation
+retention.
 
 ## Measure live quality separately
 
@@ -283,4 +340,4 @@ step. Pass SC-002 only if all ten identities are correct and at least nine works
 source. Provider-free checks cannot substitute for this result.
 
 Report SC-001 through SC-006 individually as PASS, FAIL, or NOT RUN with evidence. Full-feature
-acceptance remains NOT RUN after Phase 4.
+acceptance remains NOT RUN after Phase 5.

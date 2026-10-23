@@ -4,8 +4,8 @@ Search for research-source candidates about a collection of films and television
 JSON API resolves titles through TMDB, waits for your explicit selections, queries Exa Search, and
 saves source metadata and provenance in SQLite. It never retrieves source pages or generates claims.
 
-Phase 4 implements submission, confirmation, search, and saved reads. Selective retry, crash
-recovery, and full live acceptance remain planned. See the
+Phase 5 implements submission, confirmation, search, saved reads, selective retry, and crash
+recovery. Remaining metadata checks and full live acceptance stay planned. See the
 [acceptance guide](docs/specs/001-search/quickstart.md) for recorded evidence and the
 [API contract](docs/specs/001-search/contracts/search-api.md) for limits and response meanings.
 
@@ -120,7 +120,18 @@ metadata, while local inputs, selections, counts, and status remain readable.
 Requests accept 1-20 inputs and a 16 KiB JSON body. Searches retain at most 20 results per work.
 Coverage is bounded, result relevance is unverified, and source processing/display permissions stay
 `unknown`. Summaries distinguish empty success, rejected URLs, and failures. Graceful shutdown
-interrupts active work; interrupted and failed work cannot yet be retried through this API.
+interrupts active work. Startup and one-second sweeps mark expired attempts interrupted; pending
+work resumes, while failed or interrupted work requires explicit retry after its saved retry time.
+
+```sh
+curl --fail-with-body -sS \
+  "http://127.0.0.1:4310/v1/search-requests/$search_request_id/retry" \
+  -H 'Content-Type: application/json' -d '{}' | jq
+```
+
+Use `{}` to retry all due failures or `{"operationIds":["operation-id-from-nextActions"]}` to choose
+operations. Completed work never repeats. A crash after a provider receives a request but before
+local commit can still cause a repeated provider charge on retry.
 
 ## Check the implementation
 
@@ -132,5 +143,6 @@ bun run format
 ```
 
 Ordinary tests use fixtures, temporary databases, and loopback servers. They make no live provider
-calls. Live quality, permissions, setup timing, and the Phase 5 crash-recovery workflow remain
-unverified. The opt-in live suite is planned for Phase 7.
+calls. Recovery tests kill a child worker and separately release stale responses from surviving
+workers. Live quality, permissions, and setup timing remain unverified. The opt-in live suite is
+planned for Phase 7.

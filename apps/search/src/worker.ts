@@ -7,6 +7,7 @@ import {
   ownsSearch,
   publishResolution,
   publishSearch,
+  recoverExpired,
   type ResolutionAttempt,
   type SearchAttempt,
 } from "./search.ts";
@@ -202,8 +203,10 @@ export function createWorker({
     return true;
   }
 
-  function runOnce(): Promise<boolean> {
-    if (stopping || active) return Promise.resolve(false);
+  async function runOnce(): Promise<boolean> {
+    if (stopping) return false;
+    recoverExpired(db);
+    if (active) return false;
     active = perform().finally(() => {
       active = null;
     });
@@ -236,6 +239,7 @@ export function createWorker({
       clearInterval(timer);
       controller?.abort();
       await active;
+      recoverExpired(db);
     },
   };
 }

@@ -65,6 +65,103 @@ type RequestRow = {
 };
 type OperationState = "pending" | "running" | "succeeded" | "failed" | "interrupted";
 
+const retrySchema = z.strictObject({
+  operationIds: z
+    .array(z.string().min(1).max(128))
+    .min(1)
+    .max(LIMITS.maxInputs)
+    .refine((ids) => new Set(ids).size === ids.length)
+    .optional(),
+});
+
+export function recoverExpired(db: Database) {
+  const now = new Date().toISOString();
+  db.transaction(() => {
+    db.run(
+      `UPDATE title_inputs SET resolution_state = 'interrupted' WHERE id IN (
+      SELECT o.input_id FROM operations o JOIN operation_attempts a ON a.id = o.current_attempt_id
+      WHERE o.state = 'running' AND a.state = 'running' AND a.deadline_at <= ?
+    )`,
+      [now],
+    );
+    db.run(
+      `UPDATE operation_attempts SET state = 'interrupted', finished_at = ?, error_code = 'operation_interrupted', retry_at = NULL
+      WHERE state = 'running' AND deadline_at <= ? AND id IN (
+        SELECT current_attempt_id FROM operations WHERE state = 'running'
+      )`,
+      [now, now],
+    );
+    db.run(
+      `UPDATE operations SET state = 'interrupted' WHERE state = 'running' AND current_attempt_id IN (
+      SELECT id FROM operation_attempts WHERE state = 'interrupted' AND deadline_at <= ?
+    )`,
+      [now],
+    );
+  }).immediate();
+}
+
+export function retryOperations(db: Database, requestId: string, body: unknown) {
+  const { operationIds } = parseRequest(retrySchema, body);
+  return db
+    .transaction(() => {
+      requestRow(db, requestId);
+      const now = new Date().toISOString();
+      const operations = db
+        .query<
+          {
+            id: string;
+            input_id: string | null;
+            state: OperationState;
+            retry_at: string | null;
+            deadline_at: string | null;
+          },
+          [string]
+        >(`SELECT o.id, o.input_id, o.state, a.retry_at, a.deadline_at FROM operations o
+      LEFT JOIN operation_attempts a ON a.id = o.current_attempt_id WHERE o.request_id = ? ORDER BY o.seq`)
+        .all(requestId);
+      const due = (o: (typeof operations)[number]) =>
+        (o.state === "failed" ||
+          o.state === "interrupted" ||
+          (o.state === "running" && o.deadline_at !== null && o.deadline_at <= now)) &&
+        (o.retry_at === null || o.retry_at <= now);
+      if (operationIds) {
+        for (const id of operationIds) {
+          const operation = operations.find((o) => o.id === id);
+          if (!operation)
+            throw new RequestError(
+              404,
+              "not_found",
+              "The operation was not found in this request.",
+            );
+          if (!due(operation))
+            throw new RequestError(
+              409,
+              "operation_not_retryable",
+              "The operation is active, completed, or not yet due.",
+              [id],
+            );
+        }
+      }
+      const selected = operations.filter((o) =>
+        operationIds ? operationIds.includes(o.id) : due(o),
+      );
+      if (selected.length) {
+        capacity(db, requestId);
+        recoverExpired(db);
+        for (const operation of selected) {
+          db.run("UPDATE operations SET state = 'pending' WHERE id = ?", [operation.id]);
+          if (operation.input_id)
+            db.run(
+              "UPDATE title_inputs SET resolution_state = 'pending', unresolved_reason = NULL WHERE id = ?",
+              [operation.input_id],
+            );
+        }
+      }
+      return { queuedOperationIds: selected.map((o) => o.id) };
+    })
+    .immediate();
+}
+
 function requestRow(db: Database, id: string) {
   const row = db.query<RequestRow, [string]>("SELECT * FROM search_requests WHERE id = ?").get(id);
   if (!row) throw new RequestError(404, "not_found", "The request was not found.");

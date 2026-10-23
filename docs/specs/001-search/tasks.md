@@ -7,9 +7,9 @@
 [provider contract](contracts/providers.md), and [quickstart.md](quickstart.md). Follow
 `.specify/memory/constitution.md` version 3.0.0.
 
-**Status**: Search is partially implemented through Phase 4. Simplification tasks T037-T040 and
-Phase 4 tasks T015-T021 are complete and cover T030's source-observation reads. Recovery, remaining
-metadata checks, and acceptance remain planned. Current verification is recorded separately in
+**Status**: Search is partially implemented through Phase 5. Simplification tasks T037-T040 and
+tasks T001-T027 are complete and cover T030's source-observation reads. Remaining metadata checks
+and acceptance stay planned. Current verification is recorded separately in
 [quickstart.md](quickstart.md).
 
 **Historical Phase 3 evidence**: On 2026-10-23, Bun 1.4.2 passed 82 tests and 408 assertions against
@@ -227,13 +227,13 @@ prove that retry preserves completed results and stale attempts cannot publish.
 
 ### Tests
 
-- [ ] T022 [P] [US3] Add recovery checks in `apps/search/tests/recovery.test.ts` using a child
+- [x] T022 [P] [US3] Add recovery checks in `apps/search/tests/recovery.test.ts` using a child
       runtime, controlled provider responses, and a temporary persistent database: kill during a
       call, restart, expire the original attempt, resume pending work, and retry interrupted work.
       Separately release a delayed response from an expired attempt in a surviving worker to prove
       it cannot overwrite a newer attempt; a response from a killed process cannot be released.
       Check graceful cancellation and surviving committed IDs/results.
-- [ ] T023 [P] [US3] Add status/retry contract checks in `apps/search/tests/search.test.ts` for
+- [x] T023 [P] [US3] Add status/retry contract checks in `apps/search/tests/search.test.ts` for
       partial success, provider-empty versus all-rejected results, resolution failures, rate limits,
       Retry-After/fallback delays, wrong-request or active/completed operation IDs, early retries,
       duplicate retries, and local-capacity rejection. Assert failures never become successful empty
@@ -241,22 +241,22 @@ prove that retry preserves completed results and stale attempts cannot publish.
 
 ### Implementation
 
-- [ ] T024 [US3] Implement failure retry and derived request/per-work status in
+- [x] T024 [US3] Implement failure retry and derived request/per-work status in
       `apps/search/src/search.ts` following `data-model.md`. Preserve all required actions and
       failures independently of summary precedence; validate explicit operation lists atomically,
       queue only due failed/interrupted operations, keep unresolved title searches out of technical
       retries, enforce capacity, and retain closed attempts and successful results.
-- [ ] T025 [US3] Complete recovery in `apps/search/src/worker.ts` and saved status reads in
+- [x] T025 [US3] Complete recovery in `apps/search/src/worker.ts` and saved status reads in
       `apps/search/src/search.ts`: sweep expired attempts once per second and at startup, interpret
       expired running work as interrupted on reads, resume pending work, and require explicit retry
       for interrupted work. Honor provider retry times with no automatic retries and preserve
       attempt-ownership checks on every late success/failure write.
-- [ ] T026 [US3] Expose retry in `apps/search/src/server.ts` using `apps/search/src/search.ts`. Keep
+- [x] T026 [US3] Expose retry in `apps/search/src/server.ts` using `apps/search/src/search.ts`. Keep
       affected operation/input/work IDs, safe errors, counts, retry times, and next actions in
       request summaries. Dedicated operation-list, attempt-history, and rejection-history endpoints
       are deferred. Match `contracts/search-api.md` status codes; readable failures remain distinct
       from HTTP/storage failures.
-- [ ] T027 [US3] Run `apps/search/tests/recovery.test.ts` and the retry/status cases in
+- [x] T027 [US3] Run `apps/search/tests/recovery.test.ts` and the retry/status cases in
       `apps/search/tests/search.test.ts`; record restart, stale-response, and selective-retry
       evidence in `docs/specs/001-search/quickstart.md`. Document the possible repeated provider
       charge after a crash before local commit without claiming exactly-once provider execution.

@@ -15,6 +15,7 @@ import {
   requestSummary,
   selectCandidates,
   submitRequest,
+  retryOperations,
 } from "./search.ts";
 import { createWorker } from "./worker.ts";
 
@@ -132,6 +133,10 @@ export function startServer({
   app.post("/v1/search-requests/:id/selections", noQuery, (c) =>
     json(selectCandidates(db, c.req.param("id"), c.get("body"))),
   );
+  app.post("/v1/search-requests/:id/retry", noQuery, (c) => {
+    const result = retryOperations(db, c.req.param("id"), c.get("body"));
+    return json(result, result.queuedOperationIds.length ? 202 : 200);
+  });
   app.get("/v1/search-requests/:id/inputs/:inputId/candidates", noQuery, (c) =>
     json(listCandidates(db, config, c.req.param("id"), c.req.param("inputId"))),
   );

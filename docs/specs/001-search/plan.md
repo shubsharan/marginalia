@@ -4,11 +4,11 @@
 
 **Input**: `docs/specs/001-search/spec.md`
 
-Status: Tasks T001-T021 are implemented through Phase 4. TMDB resolution, explicit selection,
-bounded Exa execution, and saved result reads are available. Retry, crash recovery, and the
-remaining acceptance work stay planned. Spec Kit reports logical branch `001-search`; the actual Git
-branch includes `feat-`. The simplification pass T037-T040 changes current-candidate reads, provider
-approval, and storage configuration only; it does not implement later Search phases.
+Status: Tasks T001-T027 are implemented through Phase 5. TMDB resolution, explicit selection,
+bounded Exa execution, saved result reads, retry, and crash recovery are available. Remaining
+metadata checks and acceptance work stay planned. Spec Kit reports logical branch `001-search`; the
+actual Git branch includes `feat-`. The simplification pass T037-T040 changes current-candidate
+reads, provider approval, and storage configuration only; it does not implement later Search phases.
 
 ## Summary
 
@@ -50,8 +50,8 @@ public accounts, application pages, or deployment work.
 **Scale/Scope**: 1-20 titles/request; 20 identity candidates/input; 20 source results/distinct work;
 one active operation per worker; local reads capped at 100 rows/page.
 
-No unresolved technical choices remain. Live relevance, account permissions, and measured recovery
-behavior remain implementation acceptance prerequisites.
+No unresolved technical choices remain. Deterministic recovery checks pass. Live relevance and
+account permissions remain acceptance prerequisites.
 
 ## Constitution check
 
@@ -129,10 +129,10 @@ apps/search/
   tests/live-acceptance.test.ts
 ```
 
-The foundation, US2, and US1 paths exist; recovery and live acceptance remain planned. The server
-owns HTTP validation; search owns submit/select/retry/read; the worker dispatches persistent
-operations; the database module owns migrations and transactions. Provider modules validate external
-responses. No repository/service class layers are needed.
+The foundation, US2, US1, and US3 paths exist; live acceptance remains planned. The server owns HTTP
+validation; search owns submit/select/retry/read; the worker dispatches persistent operations; the
+database module owns migrations and transactions. Provider modules validate external responses. No
+repository/service class layers are needed.
 
 Hono owns route matching and shared access middleware. Zod validates submissions, selections,
 growing-list pagination, provider approval, and metadata without exposing raw validation errors. A
