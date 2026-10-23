@@ -1,9 +1,9 @@
 # Local search API
 
-JSON API at `http://127.0.0.1:4310`. Phase 3 implements health, submission, request summary,
-candidate listing, and selection routes. The remaining routes are planned. Final selection queues
-search operations; Phase 4 adds their execution. Public hosting and the full knowledge-query API are
-outside this feature.
+JSON API at `http://127.0.0.1:4310`. Phase 4 implements health, submission, request summary,
+candidate listing, selection, search execution, saved lists, stable work/source reads, and paginated
+source observations. Retry remains planned for Phase 5. Public hosting and the full knowledge-query
+API are outside this feature.
 
 Hono routes requests through shared access checks; Zod schemas validate boundary data. Validation
 responses expose field paths and local codes, never raw library errors or input values. Internal
@@ -55,7 +55,7 @@ candidates remain stored internally. Responses keep query context, returned/reta
 `coverageBounded`, and limit flags; they omit `nextCursor` and `snapshotAt`. Query parameters return
 `400 invalid_query`.
 
-Planned growing lists accept `limit` from 1-100, default 25, and an optional cursor. Return `items`,
+Growing lists accept `limit` from 1-100, default 25, and an optional cursor. Return `items`,
 `nextCursor` or null, and `snapshotAt`. Cursor scope includes endpoint/filter, maximum row sequence,
 and last sequence. Reject malformed/mismatched cursors with 400. Pagination reads saved rows only.
 New traversals include later inserts. Embedded input/work summaries are bounded by the submission

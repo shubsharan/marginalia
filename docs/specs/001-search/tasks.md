@@ -7,9 +7,9 @@
 [provider contract](contracts/providers.md), and [quickstart.md](quickstart.md). Follow
 `.specify/memory/constitution.md` version 3.0.0.
 
-**Status**: Search is partially implemented through Phase 3. Simplification tasks T037-T040 are
-complete after Phase 3; Phases 4-7 remain planned. Current verification is recorded separately in
-[quickstart.md](quickstart.md).
+**Status**: Search is partially implemented through Phase 4. Simplification tasks T037-T040 and
+Phase 4 tasks T015-T021 are complete; Phases 5-7 remain planned. Current verification is recorded
+separately in [quickstart.md](quickstart.md).
 
 **Historical Phase 3 evidence**: On 2026-10-23, Bun 1.4.2 passed 82 tests and 408 assertions against
 sanitized fixtures, temporary databases, and loopback HTTP servers. US2 checks cover bounded TMDB
@@ -169,14 +169,14 @@ references without provider calls. Live setup timing remains a separate acceptan
 
 ### Tests
 
-- [ ] T015 [P] [US1] Add Exa fixtures in `apps/search/tests/fixtures/exa.json` and checks in
+- [x] T015 [P] [US1] Add Exa fixtures in `apps/search/tests/fixtures/exa.json` and checks in
       `apps/search/tests/providers.test.ts` for exact Search request keys, one query per selected
       work, valid empty results, caps, safe URL validation/normalization, and injected
       text/highlights/summary/raw errors that must never reach returned metadata. Assert no
       Contents, synthesis, or unselected-work requests. Assert `redirect: "error"` and reuse the
       local redirect check with a fake `x-api-key`, proving failure without any request reaching the
       redirect destination.
-- [ ] T016 [P] [US1] Add the complete submit-select-search-read acceptance flow in
+- [x] T016 [P] [US1] Add the complete submit-select-search-read acceptance flow in
       `apps/search/tests/search.test.ts`: shared sources across works, aliases resolving to one
       membership, separate repeated requests, preserved query/rank/time observations, independent
       title-identical URLs, bounded complete pagination, and identical saved reads after database
@@ -184,29 +184,29 @@ references without provider calls. Live setup timing remains a separate acceptan
 
 ### Implementation
 
-- [ ] T017 [US1] Implement Exa Search in `apps/search/src/providers/exa.ts` using injected fetch and
+- [x] T017 [US1] Implement Exa Search in `apps/search/src/providers/exa.ts` using injected fetch and
       the exact metadata-only request/response contract. Construct one query from each frozen work
       selection, require provider approval for the fixed metadata fields and retain safe notices
       only, validate and normalize public HTTP/HTTPS source locations without fetching them,
       classify provider/response failures, and expose returned/retained/rejected counts and limit
       indicators.
-- [ ] T018 [US1] Implement atomic search publication in `apps/search/src/search.ts`: reuse
+- [x] T018 [US1] Implement atomic search publication in `apps/search/src/search.ts`: reuse
       normalized source identities, retain per-attempt observations and all request/work
       associations, save safe rejected-result reasons, and mark success only after all local writes
       commit. Validate attempt ownership/deadline and selected-work membership; roll back storage
       failures, never add unselected works, and never merge different URLs by title.
-- [ ] T019 [US1] Extend `apps/search/src/worker.ts` with the search handler using
+- [x] T019 [US1] Extend `apps/search/src/worker.ts` with the search handler using
       `src/providers/exa.ts` and `src/search.ts`. Run one external call at a time with bounded
       response consumption, persist successful empty outcomes distinctly from failures, and preserve
       completed operations across process restart. Wire clean startup/shutdown in
       `apps/search/src/server.ts`; active cancellation becomes interrupted rather than successful.
-- [ ] T020 [US1] Add saved request listing, selected works, collection sources, and stable
+- [x] T020 [US1] Add saved request listing, selected works, collection sources, and stable
       work/source detail reads in `apps/search/src/search.ts` and their routes in
       `apps/search/src/server.ts`. Use scoped snapshot/keyset pagination with 1-100 rows, reject
       malformed/mismatched cursors, include all work associations, and read only persisted records
       with current provider approval and explicit candidate/unknown-rights markers. Missing approval
       blocks metadata reads; missing credentials do not. Use the fixed adapter metadata contract.
-- [ ] T021 [US1] Replace the starter instructions in `README.md` with actual install, configuration,
+- [x] T021 [US1] Replace the starter instructions in `README.md` with actual install, configuration,
       permission-policy, stopped-server migration, startup, confirmation, and saved-read examples
       matching `docs/specs/001-search/quickstart.md`. Run the US1 provider/integration checks in
       `apps/search/tests/providers.test.ts` and `apps/search/tests/search.test.ts`; record results

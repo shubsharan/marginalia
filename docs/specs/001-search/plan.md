@@ -4,10 +4,10 @@
 
 **Input**: `docs/specs/001-search/spec.md`
 
-Status: Tasks T001-T014 are implemented through Phase 3. TMDB resolution and explicit selection are
-available; Exa execution and the remaining stories stay planned. Search operations remain pending
-after selection until Phase 4. Spec Kit reports logical branch `001-search`; the actual Git branch
-includes `feat-`. The simplification pass T037-T040 changes current-candidate reads, provider
+Status: Tasks T001-T021 are implemented through Phase 4. TMDB resolution, explicit selection,
+bounded Exa execution, and saved result reads are available. Retry, crash recovery, and the
+remaining acceptance work stay planned. Spec Kit reports logical branch `001-search`; the actual Git
+branch includes `feat-`. The simplification pass T037-T040 changes current-candidate reads, provider
 approval, and storage configuration only; it does not implement later Search phases.
 
 ## Summary
@@ -129,18 +129,17 @@ apps/search/
   tests/live-acceptance.test.ts
 ```
 
-The foundation and US2 paths exist; Exa and later-story modules remain planned. The server owns HTTP
-validation; search owns submit/select/retry/read; the worker dispatches persistent operations; the
-database module owns migrations and transactions. Provider modules validate external responses. No
-repository/service class layers are needed.
+The foundation, US2, and US1 paths exist; recovery and live acceptance remain planned. The server
+owns HTTP validation; search owns submit/select/retry/read; the worker dispatches persistent
+operations; the database module owns migrations and transactions. Provider modules validate external
+responses. No repository/service class layers are needed.
 
 Hono owns route matching and shared access middleware. Zod validates submissions, selections,
-planned growing-list pagination, provider approval, and metadata without exposing raw validation
-errors. A shared bounded JSON reader enforces byte limits and strict UTF-8 for both HTTP and
-provider bodies. Provider adapters return neverthrow results for expected failures; SQLite
-transaction callbacks still throw on failure so rollback occurs before HTTP error handling.
-Candidate parsing stays in the provider module. Request summaries join selected work IDs and derive
-status through ordered rules.
+growing-list pagination, provider approval, and metadata without exposing raw validation errors. A
+shared bounded JSON reader enforces byte limits and strict UTF-8 for both HTTP and provider bodies.
+Provider adapters return neverthrow results for expected failures; SQLite transaction callbacks
+still throw on failure so rollback occurs before HTTP error handling. Candidate parsing stays in the
+provider module. Request summaries join selected work IDs and derive status through ordered rules.
 
 Candidate reads return the current attempt's at most 20 candidates without cursors. Provider
 approval gates calls and metadata reads as a whole; fixed adapters replace field-level policy
@@ -156,8 +155,8 @@ starter README with actual setup, ignore database/WAL/SHM files, and add app scr
 TypeScript config, formatter, and linter. Direct app commands suffice; this plan requires no
 Turborepo changes.
 
-Existing sanitized TMDB fixtures cover resolution. Exa fixtures and the predeclared live
-corpus/relevance rubric remain future work. Preserve unrelated working-tree changes. This
+Sanitized TMDB and Exa fixtures cover resolution and metadata search. The predeclared live
+corpus/relevance rubric remains future work. Preserve unrelated working-tree changes. This
 simplification adds no dependencies, public hosting, UI, or additional Search phases.
 
 ## Validation coverage

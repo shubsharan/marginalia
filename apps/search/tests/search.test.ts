@@ -7,7 +7,7 @@ import { join, relative } from "node:path";
 import { APP_DIRECTORY, LIMITS, loadConfig, providerReadiness } from "../src/config.ts";
 import { loadMigrations, migrateDatabase, openDatabase } from "../src/db.ts";
 import { startServer } from "../src/server.ts";
-import { createResolutionWorker } from "../src/worker.ts";
+import { createWorker } from "../src/worker.ts";
 import type { TmdbFetch } from "../src/providers/tmdb.ts";
 import tmdbFixtures from "./fixtures/tmdb.json" with { type: "json" };
 
@@ -734,7 +734,7 @@ function resolutionSetup(fetcher: TmdbFetch = async () => Response.json(tmdbFixt
   const configuration = config({ TMDB_READ_ACCESS_TOKEN: fakeSecret });
   const server = startServer({ db, config: configuration, port: 0 });
   servers.push(server);
-  const worker = createResolutionWorker({ db, config: configuration, fetch: fetcher });
+  const worker = createWorker({ db, config: configuration, fetch: fetcher });
   async function api(route = "", body?: unknown) {
     const response = await http(server, {
       path: `/v1/search-requests${route}`,
@@ -757,6 +757,438 @@ function resolutionSetup(fetcher: TmdbFetch = async () => Response.json(tmdbFixt
   }
   return { db, path, configuration, server, worker, api, submit, summary, candidates };
 }
+
+function searchSetup(
+  searchFetch: TmdbFetch = async () =>
+    Response.json({
+      requestId: "fixture-exa-request",
+      notices: [{ code: "RESTRICTIONS_RELAXED", message: fakeSecret }],
+      results: [
+        {
+          id: "shared",
+          url: "https://EXAMPLE.com:443/shared#review",
+          title: "Same title",
+          text: fakeSecret,
+        },
+        { id: "other", url: "https://example.com/other", title: "Same title", summary: fakeSecret },
+        { url: "http://127.0.0.1/private", title: fakeSecret },
+      ],
+    }),
+) {
+  const calls: string[] = [];
+  const s = resolutionSetup(async (url, init) => {
+    expect(s.db.inTransaction).toBe(false);
+    if (url.hostname === "api.exa.ai") {
+      calls.push(String(init.body));
+      return searchFetch(url, init);
+    }
+    const title = url.searchParams.get("query");
+    const tv = url.pathname.endsWith("tv");
+    return Response.json({
+      results: [
+        {
+          id: title?.startsWith("Work ")
+            ? Number(title.slice(5)) + 1000
+            : title === "Arrival"
+              ? 329865
+              : tv
+                ? 1396
+                : 949,
+          ...(tv
+            ? { name: "Breaking Bad", first_air_date: "2008-01-20" }
+            : {
+                title: title?.startsWith("Work ")
+                  ? title
+                  : title === "Arrival"
+                    ? "Arrival"
+                    : "Heat",
+                release_date: title === "Arrival" ? "2016-09-01" : "1995-12-15",
+              }),
+        },
+      ],
+    });
+  });
+  s.configuration.providers.exa.credential = fakeSecret;
+  async function confirm(id: string) {
+    const summary = await s.summary(id);
+    const selections = [];
+    for (const input of summary.inputs) {
+      const candidate = (await s.candidates(id, input.id)).body.items[0];
+      selections.push({ inputId: input.id, candidateId: candidate.id });
+    }
+    expect((await s.api(`/${id}/selections`, { selections })).status).toBe(200);
+  }
+  return { ...s, calls, confirm };
+}
+
+describe("US1 persisted source search", () => {
+  test("source pagination freezes associations already present and excludes later work matches", async () => {
+    const s = searchSetup();
+    const id = await s.submit([
+      { title: "Heat", workType: "film" },
+      { title: "Arrival", workType: "film" },
+      { title: "Breaking Bad", workType: "television_series" },
+    ]);
+    for (let i = 0; i < 3; i++) await s.worker.runOnce();
+    await s.confirm(id);
+    await s.worker.runOnce();
+    await s.worker.runOnce();
+    const first = (await s.api(`/${id}/sources?limit=1`)).body;
+    const route = `/${id}/sources?limit=1&cursor=${first.nextCursor}`;
+    const before = (await s.api(route)).body;
+    expect(before.items[0].workIds).toHaveLength(2);
+    await s.worker.runOnce();
+    expect((await s.api(route)).body).toEqual(before);
+    expect((await s.api(`/${id}/sources`)).body.items[0].workIds).toHaveLength(3);
+  });
+  test("full result caps persist and source/work pagination reaches all rows", async () => {
+    const s = searchSetup(async (_url, init) => {
+      const query = JSON.parse(String(init.body)).query;
+      return Response.json({
+        results: Array.from({ length: 20 }, (_, i) => ({
+          url: `https://example.com/${encodeURIComponent(query)}/${i}`,
+        })),
+      });
+    });
+    const id = await s.submit(
+      Array.from({ length: 6 }, (_, i) => ({ title: `Work ${i}`, workType: "film" })),
+    );
+    for (let i = 0; i < 6; i++) await s.worker.runOnce();
+    await s.confirm(id);
+    for (let i = 0; i < 6; i++) await s.worker.runOnce();
+    const summary = await s.summary(id);
+    expect(summary.status).toBe("completed");
+    expect(summary.limitFlags).toContain("result_limit_reached");
+    expect(s.db.query("SELECT count(*) n FROM source_observations").get()).toEqual({ n: 120 });
+    const first = (await s.api(`/${id}/sources?limit=100`)).body;
+    expect(first.items).toHaveLength(100);
+    const second = (await s.api(`/${id}/sources?limit=100&cursor=${first.nextCursor}`)).body;
+    expect(second.items).toHaveLength(20);
+    expect(second.nextCursor).toBeNull();
+    expect(new Set([...first.items, ...second.items].map((row) => row.id)).size).toBe(120);
+    const workIds = [];
+    let cursor: string | null = null;
+    do {
+      const result: { items: { id: string }[]; nextCursor: string | null } = (
+        await s.api(`/${id}/works?limit=1${cursor ? `&cursor=${cursor}` : ""}`)
+      ).body;
+      workIds.push(...result.items.map((row: { id: string }) => row.id));
+      cursor = result.nextCursor;
+    } while (cursor);
+    expect(new Set(workIds).size).toBe(6);
+  });
+
+  test("pending search resumes after reopen and graceful cancellation interrupts the active search", async () => {
+    const s = searchSetup();
+    const id = await s.submit();
+    await s.worker.runOnce();
+    await s.confirm(id);
+    await s.worker.stop();
+    await s.server.stop(true);
+    close(s.db);
+    const reopened = openDatabase(s.path);
+    databases.add(reopened);
+    let began!: () => void;
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    const worker = createWorker({
+      db: reopened,
+      config: s.configuration,
+      fetch: async (_url, init) => {
+        began();
+        return new Promise<Response>((_resolve, reject) =>
+          init.signal?.addEventListener("abort", () => reject(new Error(fakeSecret)), {
+            once: true,
+          }),
+        );
+      },
+    });
+    const active = worker.runOnce();
+    await started;
+    expect(await worker.runOnce()).toBe(false);
+    await worker.stop();
+    await active;
+    expect(reopened.query("SELECT state FROM operations WHERE kind = 'search'").get()).toEqual({
+      state: "interrupted",
+    });
+    expect(
+      reopened
+        .query("SELECT state, error_code FROM operation_attempts WHERE provider = 'exa'")
+        .get(),
+    ).toEqual({ state: "interrupted", error_code: "operation_interrupted" });
+    expect(reopened.query("SELECT count(*) n FROM sources").get()).toEqual({ n: 0 });
+  });
+
+  test.each(["expired", "superseded"])(
+    "%s search attempts cannot publish late sources",
+    async (mode) => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const s = searchSetup(async () => {
+        await held;
+        return Response.json({ results: [{ url: "https://example.com/late" }] });
+      });
+      const id = await s.submit();
+      await s.worker.runOnce();
+      await s.confirm(id);
+      const active = s.worker.runOnce();
+      const operation = s.db
+        .query<{ id: string; current_attempt_id: string }, []>(
+          "SELECT id, current_attempt_id FROM operations WHERE kind = 'search'",
+        )
+        .get();
+      if (!operation) throw new Error("Expected active search operation.");
+      if (mode === "expired")
+        s.db.run("UPDATE operation_attempts SET deadline_at = ? WHERE id = ?", [
+          new Date(Date.now() - 1000).toISOString(),
+          operation.current_attempt_id,
+        ]);
+      else {
+        const newer = crypto.randomUUID();
+        s.db.run(
+          "INSERT INTO operation_attempts (id, operation_id, attempt_number, provider, query, template_version, started_at, deadline_at) VALUES (?, ?, 2, 'exa', 'new query', 'exa-search-v1', ?, ?)",
+          [
+            newer,
+            operation.id,
+            new Date().toISOString(),
+            new Date(Date.now() + 60000).toISOString(),
+          ],
+        );
+        s.db.run("UPDATE operations SET current_attempt_id = ? WHERE id = ?", [
+          newer,
+          operation.id,
+        ]);
+      }
+      const before = s.db.serialize();
+      release();
+      await active;
+      expect(s.db.serialize()).toEqual(before);
+      expect(s.db.query("SELECT count(*) n FROM sources").get()).toEqual({ n: 0 });
+    },
+  );
+
+  test("confirmed works search once each, share sources, and keep query/rank/time after offline reopen", async () => {
+    const s = searchSetup();
+    const id = await s.submit([
+      { title: "Heat", year: 1995, workType: "film" },
+      { title: "Heat alias", workType: "film" },
+      { title: "Arrival", year: 2016, workType: "film" },
+      { title: "Breaking Bad", year: 2008, workType: "television_series" },
+    ]);
+    for (let i = 0; i < 4; i++) expect(await s.worker.runOnce()).toBe(true);
+    expect(await s.worker.runOnce()).toBe(false);
+    expect(s.calls).toHaveLength(0);
+    await s.confirm(id);
+    for (let i = 0; i < 3; i++) expect(await s.worker.runOnce()).toBe(true);
+    expect(await s.worker.runOnce()).toBe(false);
+    expect(s.calls.map((body) => JSON.parse(body).query)).toEqual([
+      "Heat 1995 film criticism analysis interviews themes filmmaking",
+      "Arrival 2016 film criticism analysis interviews themes filmmaking",
+      "Breaking Bad 2008 television series criticism analysis interviews themes filmmaking",
+    ]);
+    const summary = await s.summary(id);
+    expect(summary).toMatchObject({ status: "completed", distinctWorkCount: 3 });
+    expect(
+      summary.coverage.map((c: { retainedCount: number; rejectedCount: number }) => [
+        c.retainedCount,
+        c.rejectedCount,
+      ]),
+    ).toEqual([
+      [2, 1],
+      [2, 1],
+      [2, 1],
+    ]);
+    const works = await s.api(`/${id}/works?limit=100`);
+    expect(works.status).toBe(200);
+    expect(works.body.items).toHaveLength(3);
+    expect(works.body.items[0].inputIds).toHaveLength(2);
+    const sources = await s.api(`/${id}/sources?limit=100`);
+    expect(sources.status).toBe(200);
+    expect(sources.body.items).toHaveLength(2);
+    expect(sources.body.items[0]).toMatchObject({
+      kind: "source_candidate",
+      relevanceVerified: false,
+      url: "https://example.com/shared",
+      workIds: works.body.items.map((w: { id: string }) => w.id),
+      processingPermission: "unknown",
+      displayPermission: "unknown",
+    });
+    const sourceId = sources.body.items[0].id;
+    const observations = await http(s.server, {
+      path: `/v1/sources/${sourceId}/observations?limit=100`,
+    });
+    expect(observations.status).toBe(200);
+    const savedObservations = JSON.parse(observations.text);
+    expect(savedObservations.items).toHaveLength(3);
+    expect(savedObservations.items[0]).toMatchObject({
+      requestId: id,
+      provider: "exa",
+      rank: 1,
+      publisher: null,
+      query: JSON.parse(s.calls[0] ?? "{}").query,
+      noticeCodes: ["RESTRICTIONS_RELAXED"],
+      metadataPolicyRevision: "test-only-v1",
+    });
+    expect(savedObservations.items[0].observedAt).toBeString();
+    expect(s.db.query("SELECT count(*) n FROM sources").get()).toEqual({ n: 2 });
+    expect(s.db.query("SELECT count(*) n FROM search_records").get()).toEqual({ n: 6 });
+    expect(s.db.query("SELECT count(*) n FROM rejected_results").get()).toEqual({ n: 3 });
+    expect(s.db.serialize().includes(Buffer.from(fakeSecret))).toBe(false);
+    const paths = [
+      `/v1/search-requests/${id}`,
+      `/v1/search-requests/${id}/works?limit=100`,
+      `/v1/search-requests/${id}/sources?limit=100`,
+      `/v1/works/${works.body.items[0].id}`,
+      `/v1/sources/${sourceId}`,
+      `/v1/sources/${sourceId}/observations?limit=100`,
+    ];
+    const before = [];
+    for (const path of paths) before.push(JSON.parse((await http(s.server, { path })).text));
+    await s.worker.stop();
+    await s.server.stop(true);
+    close(s.db);
+    const reopened = openDatabase(s.path);
+    databases.add(reopened);
+    const offlineConfig = config();
+    const offline = startServer({ db: reopened, config: offlineConfig, port: 0 });
+    servers.push(offline);
+    const network = spyOn(globalThis, "fetch").mockImplementation(
+      Object.assign(
+        () => {
+          throw new Error("Unexpected network call");
+        },
+        { preconnect: globalThis.fetch.preconnect },
+      ),
+    );
+    try {
+      for (const [index, path] of paths.entries()) {
+        const saved = await http(offline, { path });
+        expect(saved.status).toBe(200);
+        const { snapshotAt: _current, ...savedValue } = JSON.parse(saved.text);
+        const { snapshotAt: _previous, ...previousValue } = before[index];
+        expect(savedValue).toEqual(previousValue);
+      }
+      expect(network).not.toHaveBeenCalled();
+      expect(await createWorker({ db: reopened, config: offlineConfig }).runOnce()).toBe(false);
+    } finally {
+      network.mockRestore();
+    }
+    offlineConfig.providers.exa.policy = null;
+    expect((await http(offline, { path: `/v1/sources/${sourceId}` })).status).toBe(503);
+    expect((await http(offline, { path: `/v1/search-requests/${id}/sources` })).status).toBe(503);
+    expect((await http(offline, { path: `/v1/sources/${sourceId}/observations` })).status).toBe(
+      503,
+    );
+    offlineConfig.providers.tmdb.policy = null;
+    expect((await http(offline, { path: `/v1/works/${works.body.items[0].id}` })).status).toBe(503);
+    expect((await http(offline, { path: `/v1/search-requests/${id}/works` })).status).toBe(503);
+    expect((await http(offline, { path: `/v1/search-requests/${id}` })).status).toBe(200);
+    expect((await http(offline, { path: "/v1/search-requests" })).status).toBe(200);
+  });
+
+  test("saved lists use scoped snapshot pagination, validate queries, and preserve repeated requests", async () => {
+    const s = searchSetup();
+    const first = await s.submit();
+    await s.worker.runOnce();
+    await s.confirm(first);
+    await s.worker.runOnce();
+    const second = await s.submit();
+    await s.worker.runOnce();
+    await s.confirm(second);
+    await s.worker.runOnce();
+    expect(s.calls).toHaveLength(2);
+    expect(s.db.query("SELECT count(*) n FROM sources").get()).toEqual({ n: 2 });
+    expect(s.db.query("SELECT count(*) n FROM search_records").get()).toEqual({ n: 4 });
+    const firstPage = await s.api("?limit=1");
+    expect(firstPage.status).toBe(200);
+    expect(firstPage.body.items[0].requestId).toBe(first);
+    expect(firstPage.body.nextCursor).toBeString();
+    const third = await s.submit();
+    const secondPage = await s.api(`?limit=100&cursor=${firstPage.body.nextCursor}`);
+    expect(secondPage.body.items.map((r: { requestId: string }) => r.requestId)).toEqual([second]);
+    expect(secondPage.body.nextCursor).toBeNull();
+    expect(secondPage.body.snapshotAt).toBe(firstPage.body.snapshotAt);
+    expect(
+      (await s.api("?limit=100")).body.items.map((r: { requestId: string }) => r.requestId),
+    ).toEqual([first, second, third]);
+    const page = await s.api(`/${first}/sources?limit=1`);
+    expect(page.body.nextCursor).toBeString();
+    const next = await s.api(`/${first}/sources?limit=1&cursor=${page.body.nextCursor}`);
+    expect(next.body.items[0].id).not.toBe(page.body.items[0].id);
+    expect(next.body.nextCursor).toBeNull();
+    const workId = (await s.api(`/${first}/works`)).body.items[0].id;
+    expect((await s.api(`/${first}/sources?workId=${workId}`)).body.items).toHaveLength(2);
+    for (const route of [
+      `/${second}/sources?cursor=${page.body.nextCursor}`,
+      `/${first}/sources?workId=${workId}&cursor=${page.body.nextCursor}`,
+      `/${first}/works?cursor=${page.body.nextCursor}`,
+      "/missing/sources",
+      `/${first}/sources?workId=missing`,
+    ])
+      expect((await s.api(route)).status).toBe(route.includes("missing") ? 404 : 400);
+    for (const query of [
+      "limit=0",
+      "limit=101",
+      "limit=1.5",
+      "limit=01",
+      "limit=-1",
+      "limit=1&limit=2",
+      "cursor=garbage",
+      "extra=x",
+      "workId=x",
+    ]) {
+      expect((await s.api(`?${query}`)).status).toBe(400);
+    }
+    const sourceId = page.body.items[0].id;
+    const observation = await http(s.server, {
+      path: `/v1/sources/${sourceId}/observations?limit=1`,
+    });
+    const observationPage = JSON.parse(observation.text);
+    expect(observationPage.nextCursor).toBeString();
+    const observationNext = await http(s.server, {
+      path: `/v1/sources/${sourceId}/observations?cursor=${observationPage.nextCursor}`,
+    });
+    expect(JSON.parse(observationNext.text).items[0].requestId).toBe(second);
+    const filtered = await http(s.server, {
+      path: `/v1/sources/${sourceId}/observations?requestId=${first}`,
+    });
+    expect(JSON.parse(filtered.text).items.map((o: { requestId: string }) => o.requestId)).toEqual([
+      first,
+    ]);
+  });
+
+  test("search publication rolls back on storage failure and empty success stays distinct", async () => {
+    const s = searchSetup();
+    const id = await s.submit();
+    await s.worker.runOnce();
+    await s.confirm(id);
+    s.db.run(
+      "CREATE TRIGGER reject_observation BEFORE INSERT ON source_observations WHEN NEW.ordinal = 1 BEGIN SELECT RAISE(ABORT, 'fake-secret-must-never-be-output'); END",
+    );
+    await s.worker.runOnce();
+    expect((await s.summary(id)).status).toBe("failed");
+    expect((await s.summary(id)).nextActions[0].errorCode).toBe("storage_unavailable");
+    for (const table of ["sources", "source_observations", "search_records", "rejected_results"]) {
+      expect(s.db.query(`SELECT count(*) n FROM ${table}`).get()).toEqual({ n: 0 });
+    }
+    const empty = searchSetup(async () => Response.json({ results: [] }));
+    const emptyId = await empty.submit();
+    await empty.worker.runOnce();
+    await empty.confirm(emptyId);
+    await empty.worker.runOnce();
+    expect((await empty.summary(emptyId)).coverage[0]).toMatchObject({
+      state: "no_sources",
+      returnedCount: 0,
+      retainedCount: 0,
+      rejectedCount: 0,
+    });
+    expect((await empty.summary(emptyId)).status).toBe("completed");
+    expect((await empty.api(`/${emptyId}/sources`)).body.items).toEqual([]);
+  });
+});
 
 describe("US2 submission and explicit selection", () => {
   test("selection storage failure rolls back writes before reaching Hono error handling", async () => {
@@ -855,6 +1287,9 @@ describe("US2 submission and explicit selection", () => {
     expect(s.db.query("SELECT count(*) n FROM operations WHERE kind = 'search'").get()).toEqual({
       n: 2,
     });
+    // The shared worker now handles the two searches queued by this first selection.
+    await s.worker.runOnce();
+    await s.worker.runOnce();
     changed = true;
     const second = await s.submit();
     await s.worker.runOnce();
@@ -910,7 +1345,7 @@ describe("US2 submission and explicit selection", () => {
       began = resolve;
     });
     const s = resolutionSetup();
-    const worker = createResolutionWorker({
+    const worker = createWorker({
       db: s.db,
       config: s.configuration,
       fetch: async (_url, init) => {
@@ -1075,7 +1510,6 @@ describe("US2 submission and explicit selection", () => {
         .query("SELECT count(*) n FROM operations WHERE kind = 'search' AND state = 'pending'")
         .get(),
     ).toEqual({ n: 1 });
-    expect(await s.worker.runOnce()).toBe(false);
     close(s.db);
     const reopened = openDatabase(s.path);
     databases.add(reopened);

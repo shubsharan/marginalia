@@ -4,8 +4,19 @@ import { LIMITS, loadConfig, providerReadiness, type Config } from "./config.ts"
 import { readBoundedJson } from "./body.ts";
 import { RequestError } from "./errors.ts";
 import { openDatabase, StorageError } from "./db.ts";
-import { listCandidates, requestSummary, selectCandidates, submitRequest } from "./search.ts";
-import { createResolutionWorker } from "./worker.ts";
+import {
+  listCandidates,
+  listRequests,
+  listWorks,
+  listSources,
+  listObservations,
+  workDetail,
+  sourceDetail,
+  requestSummary,
+  selectCandidates,
+  submitRequest,
+} from "./search.ts";
+import { createWorker } from "./worker.ts";
 
 function json(value: unknown, status = 200) {
   return Response.json(value, {
@@ -116,12 +127,24 @@ export function startServer({
     json({ storage: { ready: true }, providers: providerReadiness(config) }),
   );
   app.post("/v1/search-requests", noQuery, (c) => json(submitRequest(db, c.get("body")), 202));
+  app.get("/v1/search-requests", (c) => json(listRequests(db, new URL(c.req.url).searchParams)));
   app.get("/v1/search-requests/:id", noQuery, (c) => json(requestSummary(db, c.req.param("id"))));
   app.post("/v1/search-requests/:id/selections", noQuery, (c) =>
     json(selectCandidates(db, c.req.param("id"), c.get("body"))),
   );
   app.get("/v1/search-requests/:id/inputs/:inputId/candidates", noQuery, (c) =>
     json(listCandidates(db, config, c.req.param("id"), c.req.param("inputId"))),
+  );
+  app.get("/v1/search-requests/:id/works", (c) =>
+    json(listWorks(db, config, c.req.param("id"), new URL(c.req.url).searchParams)),
+  );
+  app.get("/v1/search-requests/:id/sources", (c) =>
+    json(listSources(db, config, c.req.param("id"), new URL(c.req.url).searchParams)),
+  );
+  app.get("/v1/works/:id", noQuery, (c) => json(workDetail(db, config, c.req.param("id"))));
+  app.get("/v1/sources/:id", noQuery, (c) => json(sourceDetail(db, config, c.req.param("id"))));
+  app.get("/v1/sources/:id/observations", (c) =>
+    json(listObservations(db, config, c.req.param("id"), new URL(c.req.url).searchParams)),
   );
   return Bun.serve<undefined>({
     hostname: "127.0.0.1",
@@ -140,7 +163,7 @@ if (import.meta.main) {
     const config = loadConfig();
     db = openDatabase(config.databasePath);
     const server = startServer({ db, config });
-    const worker = createResolutionWorker({ db, config });
+    const worker = createWorker({ db, config });
     worker.start();
     const connection = db;
     let stopping = false;

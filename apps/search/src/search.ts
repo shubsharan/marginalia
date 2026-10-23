@@ -8,6 +8,7 @@ import {
   type WorkType,
 } from "./providers/tmdb.ts";
 import { parseRequest, RequestError } from "./errors.ts";
+import type { SearchResult, SearchSelection } from "./providers/exa.ts";
 
 const submissionSchema = z.strictObject({
   inputs: z.array(resolutionInputSchema).min(1).max(LIMITS.maxInputs),
@@ -184,9 +185,11 @@ export function requestSummary(db: Database, id: string) {
           ? "configure_credentials"
           : o.error_code === "metadata_policy_missing" || o.error_code === "metadata_restricted"
             ? "review_metadata_policy"
-            : o.error_code === "provider_access"
-              ? "resolve_provider_access"
-              : "retry_operation",
+            : o.error_code === "provider_budget"
+              ? "restore_provider_credits"
+              : o.error_code === "provider_access"
+                ? "resolve_provider_access"
+                : "retry_operation",
       operationId: o.id,
       inputId: o.input_id,
       workId: o.work_id,
@@ -510,5 +513,418 @@ export function listCandidates(db: Database, config: Config, requestId: string, 
     returnedCount: operation?.returned_count ?? 0,
     retainedCount: operation?.retained_count ?? 0,
     queryContext: JSON.parse(operation?.query_context ?? "{}"),
+  };
+}
+
+export type SearchAttempt = {
+  id: string;
+  operationId: string;
+  requestId: string;
+  workId: string;
+  selection: SearchSelection;
+  deadlineAt: string;
+};
+
+export function ownsSearch(db: Database, attempt: SearchAttempt) {
+  return Boolean(
+    db
+      .query(`
+    SELECT 1 FROM operations o JOIN operation_attempts a ON a.id = o.current_attempt_id
+    JOIN request_works rw ON rw.request_id = o.request_id AND rw.work_id = o.work_id
+    JOIN search_requests r ON r.id = o.request_id
+    WHERE o.id = ? AND o.kind = 'search' AND o.request_id = ? AND o.work_id = ?
+      AND r.frozen_at IS NOT NULL AND o.state = 'running' AND a.id = ?
+      AND a.state = 'running' AND a.deadline_at > ?
+  `)
+      .get(
+        attempt.operationId,
+        attempt.requestId,
+        attempt.workId,
+        attempt.id,
+        new Date().toISOString(),
+      ),
+  );
+}
+
+export function publishSearch(db: Database, attempt: SearchAttempt, result: SearchResult) {
+  return db
+    .transaction(() => {
+      if (!ownsSearch(db, attempt)) return false;
+      for (const source of result.sources) {
+        db.run(
+          "INSERT INTO sources (id, normalized_url, source_host) VALUES (?, ?, ?) ON CONFLICT (normalized_url) DO NOTHING",
+          [crypto.randomUUID(), source.normalizedUrl, source.sourceHost],
+        );
+        const identity = db
+          .query<{ id: string }, [string]>("SELECT id FROM sources WHERE normalized_url = ?")
+          .get(source.normalizedUrl);
+        if (!identity) throw new Error("Source identity was not saved.");
+        db.run(
+          "INSERT INTO search_records (id, request_id, work_id, source_id) VALUES (?, ?, ?, ?) ON CONFLICT (request_id, work_id, source_id) DO NOTHING",
+          [crypto.randomUUID(), attempt.requestId, attempt.workId, identity.id],
+        );
+        const record = db
+          .query<{ id: string }, [string, string, string]>(
+            "SELECT id FROM search_records WHERE request_id = ? AND work_id = ? AND source_id = ?",
+          )
+          .get(attempt.requestId, attempt.workId, identity.id);
+        if (!record) throw new Error("Source association was not saved.");
+        db.run(
+          `INSERT INTO source_observations
+        (id, search_record_id, attempt_id, provider_result_id, ordinal, original_url, title, author, publisher, publication_date, observed_at, metadata_policy_revision, warning_codes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            crypto.randomUUID(),
+            record.id,
+            attempt.id,
+            source.providerResultId,
+            source.ordinal,
+            source.originalUrl,
+            source.title,
+            source.author,
+            source.publisher,
+            source.publicationDate,
+            source.observedAt,
+            result.metadataPolicyRevision,
+            JSON.stringify(source.warningCodes),
+          ],
+        );
+      }
+      for (const rejection of result.rejections)
+        db.run(
+          "INSERT INTO rejected_results (id, attempt_id, ordinal, reason_code) VALUES (?, ?, ?, ?)",
+          [crypto.randomUUID(), attempt.id, rejection.ordinal, rejection.reasonCode],
+        );
+      db.run(
+        `UPDATE operation_attempts SET state = 'succeeded', finished_at = ?, provider_request_id = ?, returned_count = ?, retained_count = ?, rejected_count = ?, limit_flags = ?, notice_codes = ? WHERE id = ?`,
+        [
+          new Date().toISOString(),
+          result.providerRequestId,
+          result.returnedCount,
+          result.sources.length,
+          result.rejections.length,
+          JSON.stringify(result.limitFlags),
+          JSON.stringify(result.noticeCodes),
+          attempt.id,
+        ],
+      );
+      db.run("UPDATE operations SET state = 'succeeded' WHERE id = ?", [attempt.operationId]);
+      return true;
+    })
+    .immediate();
+}
+
+const cursorSchema = z
+  .strictObject({
+    scope: z.string(),
+    max: z.int().nonnegative(),
+    last: z.int().nonnegative(),
+    snapshotAt: z.iso.datetime(),
+  })
+  .refine((cursor) => cursor.last <= cursor.max);
+
+function pagination(query: URLSearchParams, scope: string, filter?: "workId" | "requestId") {
+  const allowed = new Set(["limit", "cursor", ...(filter ? [filter] : [])]);
+  for (const key of query.keys())
+    if (!allowed.has(key) || query.getAll(key).length !== 1)
+      throw new RequestError(400, "invalid_query", "Invalid query parameters.");
+  const limit = query.get("limit") ?? "25";
+  if (!/^[1-9]\d{0,2}$/.test(limit) || Number(limit) > 100)
+    throw new RequestError(400, "invalid_query", "Limit must be between 1 and 100.");
+  const encoded = query.get("cursor");
+  let cursor: z.infer<typeof cursorSchema> | null = null;
+  if (encoded !== null) {
+    let value: unknown;
+    try {
+      if (!/^[A-Za-z0-9_-]{1,2048}$/.test(encoded)) throw new SyntaxError();
+      value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    } catch {
+      throw new RequestError(400, "invalid_cursor", "Invalid pagination cursor.");
+    }
+    const parsed = cursorSchema.safeParse(value);
+    if (!parsed.success || parsed.data.scope !== scope)
+      throw new RequestError(400, "invalid_cursor", "The cursor does not match this list.");
+    cursor = parsed.data;
+  }
+  return { limit: Number(limit), cursor };
+}
+
+function page<T extends { seq: number }>(
+  db: Database,
+  query: URLSearchParams,
+  scope: string,
+  sql: string,
+  params: string[] = [],
+  filter?: "workId" | "requestId",
+) {
+  const { limit, cursor } = pagination(query, scope, filter);
+  const max =
+    cursor?.max ??
+    db
+      .query<{ max: number }, string[]>(`SELECT coalesce(max(seq), 0) max FROM (${sql})`)
+      .get(...params)?.max ??
+    0;
+  const snapshotAt = cursor?.snapshotAt ?? new Date().toISOString();
+  const rows = db
+    .query<T, (string | number)[]>(
+      `SELECT * FROM (${sql}) WHERE seq > ? AND seq <= ? ORDER BY seq LIMIT ?`,
+    )
+    .all(...params, cursor?.last ?? 0, max, limit + 1);
+  return pageResult(rows, limit, scope, max, snapshotAt);
+}
+
+function pageResult<T extends { seq: number }>(
+  rows: T[],
+  limit: number,
+  scope: string,
+  max: number,
+  snapshotAt: string,
+) {
+  const items = rows.slice(0, limit);
+  const last = items.at(-1);
+  return {
+    items,
+    snapshotAt,
+    nextCursor:
+      rows.length > limit && last
+        ? Buffer.from(JSON.stringify({ scope, max, last: last.seq, snapshotAt })).toString(
+            "base64url",
+          )
+        : null,
+  };
+}
+
+function requireApproval(config: Config, provider: "tmdb" | "exa") {
+  if (!config.providers[provider].policy)
+    throw new RequestError(
+      503,
+      "metadata_policy_missing",
+      `Review the ${provider} metadata policy.`,
+    );
+}
+
+function workMetadata(row: CandidateRow | WorkRow) {
+  return {
+    provider: row.provider,
+    providerMediaType: row.provider_media_type,
+    providerId: row.provider_id,
+    identityUrl: `https://www.themoviedb.org/${row.provider_media_type}/${row.provider_id}`,
+    title: row.title,
+    originalTitle: row.original_title,
+    workType: row.work_type,
+    releaseDate: row.release_date,
+    originalLanguage: row.original_language,
+    originCountries: row.origin_countries === null ? null : JSON.parse(row.origin_countries),
+    retrievedAt: row.retrieved_at,
+  };
+}
+
+type WorkRow = Pick<
+  CandidateRow,
+  | "seq"
+  | "id"
+  | "provider"
+  | "provider_media_type"
+  | "provider_id"
+  | "title"
+  | "original_title"
+  | "work_type"
+  | "release_date"
+  | "original_language"
+  | "origin_countries"
+  | "retrieved_at"
+>;
+
+export function listRequests(db: Database, query: URLSearchParams) {
+  const result = page<RequestRow & { seq: number }>(
+    db,
+    query,
+    "requests",
+    "SELECT * FROM search_requests",
+  );
+  return { ...result, items: result.items.map((row) => requestSummary(db, row.id)) };
+}
+
+export function workDetail(db: Database, config: Config, id: string) {
+  const row = db.query<WorkRow, [string]>("SELECT * FROM works WHERE id = ?").get(id);
+  if (!row) throw new RequestError(404, "not_found", "The work was not found.");
+  requireApproval(config, "tmdb");
+  return { id: row.id, ...workMetadata(row) };
+}
+
+export function listWorks(db: Database, config: Config, requestId: string, query: URLSearchParams) {
+  requestRow(db, requestId);
+  requireApproval(config, "tmdb");
+  const result = page<WorkRow & { work_id: string }>(
+    db,
+    query,
+    `works:${requestId}`,
+    `SELECT rw.seq, rw.work_id, c.id, c.provider, c.provider_media_type, c.provider_id, c.title, c.original_title, c.work_type, c.release_date, c.original_language, c.origin_countries, c.retrieved_at FROM request_works rw JOIN resolution_candidates c ON c.id = rw.selected_candidate_id WHERE rw.request_id = ?`,
+    [requestId],
+  );
+  const inputs = requestSummary(db, requestId).inputs;
+  return {
+    ...result,
+    items: result.items.map((row) => ({
+      id: row.work_id,
+      selectedCandidateId: row.id,
+      selectionSnapshot: workMetadata(row),
+      inputIds: inputs.filter((input) => input.workId === row.work_id).map((input) => input.id),
+    })),
+  };
+}
+
+type SourceRow = {
+  seq: number;
+  id: string;
+  normalized_url: string;
+  source_host: string;
+  processing_permission: "unknown";
+  display_permission: "unknown";
+};
+
+function sourceMetadata(row: SourceRow) {
+  return {
+    id: row.id,
+    kind: "source_candidate",
+    relevanceVerified: false,
+    url: row.normalized_url,
+    sourceHost: row.source_host,
+    processingPermission: row.processing_permission,
+    displayPermission: row.display_permission,
+    observationsUrl: `/v1/sources/${row.id}/observations`,
+  };
+}
+
+function sourceRow(db: Database, id: string) {
+  const row = db.query<SourceRow, [string]>("SELECT * FROM sources WHERE id = ?").get(id);
+  if (!row) throw new RequestError(404, "not_found", "The source was not found.");
+  return row;
+}
+
+export function sourceDetail(db: Database, config: Config, id: string) {
+  const row = sourceRow(db, id);
+  requireApproval(config, "exa");
+  return sourceMetadata(row);
+}
+
+export function listSources(
+  db: Database,
+  config: Config,
+  requestId: string,
+  query: URLSearchParams,
+) {
+  requestRow(db, requestId);
+  requireApproval(config, "exa");
+  const workId = query.get("workId");
+  const scope = `sources:${requestId}:${workId ?? ""}`;
+  const { limit, cursor } = pagination(query, scope, "workId");
+  if (
+    workId !== null &&
+    !db
+      .query("SELECT 1 FROM request_works WHERE request_id = ? AND work_id = ?")
+      .get(requestId, workId)
+  )
+    throw new RequestError(404, "not_found", "The selected work was not found in this request.");
+  const max =
+    cursor?.max ??
+    db
+      .query<{ max: number }, [string]>(
+        "SELECT coalesce(max(seq), 0) max FROM search_records WHERE request_id = ?",
+      )
+      .get(requestId)?.max ??
+    0;
+  const snapshotAt = cursor?.snapshotAt ?? new Date().toISOString();
+  const rows = db
+    .query<SourceRow, (string | number)[]>(`
+    SELECT min(r.seq) seq, s.id, s.normalized_url, s.source_host, s.processing_permission, s.display_permission
+    FROM sources s JOIN search_records r ON r.source_id = s.id
+    WHERE r.request_id = ? AND r.seq <= ?${workId === null ? "" : " AND r.work_id = ?"}
+    GROUP BY s.id HAVING min(r.seq) > ? ORDER BY seq LIMIT ?
+  `)
+    .all(requestId, max, ...(workId === null ? [] : [workId]), cursor?.last ?? 0, limit + 1);
+  const result = pageResult(rows, limit, scope, max, snapshotAt);
+  return {
+    ...result,
+    items: result.items.map((row) => ({
+      ...sourceMetadata(row),
+      workIds: db
+        .query<{ work_id: string }, [string, string, number]>(
+          "SELECT work_id FROM search_records WHERE request_id = ? AND source_id = ? AND seq <= ? ORDER BY seq",
+        )
+        .all(requestId, row.id, max)
+        .map((r) => r.work_id),
+      observationsUrl: `/v1/sources/${row.id}/observations?requestId=${requestId}`,
+    })),
+  };
+}
+
+type ObservationRow = {
+  seq: number;
+  id: string;
+  original_url: string;
+  title: string | null;
+  author: string | null;
+  publisher: string | null;
+  publication_date: string | null;
+  observed_at: string;
+  ordinal: number;
+  metadata_policy_revision: string;
+  warning_codes: string;
+  request_id: string;
+  work_id: string;
+  attempt_id: string;
+  query: string;
+  provider: "exa";
+  template_version: string;
+  provider_request_id: string | null;
+  notice_codes: string;
+};
+
+export function listObservations(
+  db: Database,
+  config: Config,
+  sourceId: string,
+  query: URLSearchParams,
+) {
+  sourceRow(db, sourceId);
+  requireApproval(config, "exa");
+  const requestId = query.get("requestId");
+  if (requestId !== null) requestRow(db, requestId);
+  const result = page<ObservationRow>(
+    db,
+    query,
+    `observations:${sourceId}:${requestId ?? ""}`,
+    `SELECT ob.*, r.request_id, r.work_id, a.query, a.provider, a.template_version, a.provider_request_id, a.notice_codes
+    FROM source_observations ob JOIN search_records r ON r.id = ob.search_record_id JOIN operation_attempts a ON a.id = ob.attempt_id
+    WHERE r.source_id = ?${requestId === null ? "" : " AND r.request_id = ?"}`,
+    requestId === null ? [sourceId] : [sourceId, requestId],
+    "requestId",
+  );
+  return {
+    ...result,
+    items: result.items.map((row) => ({
+      id: row.id,
+      sourceId,
+      requestId: row.request_id,
+      workId: row.work_id,
+      attemptId: row.attempt_id,
+      url: row.original_url,
+      title: row.title,
+      author: row.author,
+      publisher: row.publisher,
+      publicationDate: row.publication_date,
+      observedAt: row.observed_at,
+      rank: row.ordinal + 1,
+      query: row.query,
+      provider: row.provider,
+      templateVersion: row.template_version,
+      providerRequestId: row.provider_request_id,
+      metadataPolicyRevision: row.metadata_policy_revision,
+      warningCodes: JSON.parse(row.warning_codes),
+      noticeCodes: JSON.parse(row.notice_codes),
+      kind: "source_candidate",
+      relevanceVerified: false,
+    })),
   };
 }

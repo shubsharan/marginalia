@@ -1,7 +1,7 @@
 # Search data model
 
-SQLite model for [the specification](spec.md). The schema exists; Exa publication, source reads,
-retry, and crash recovery remain planned. Local records have UUIDs and UTC timestamps. Foreign keys
+SQLite model for [the specification](spec.md). The schema, Exa publication, and saved reads exist;
+retry and crash recovery remain planned. Local records have UUIDs and UTC timestamps. Foreign keys
 are enabled. Provider observations and selection snapshots retain their original values.
 
 ## Records and constraints

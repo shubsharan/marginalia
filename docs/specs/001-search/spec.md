@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-22
 
-**Status**: Partially implemented through Phase 3; remaining stories and full acceptance are
+**Status**: Partially implemented through Phase 4; remaining stories and full acceptance are
 planned.
 
 **Input**: User description: "docs/roadmap.md #1, Search"
