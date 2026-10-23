@@ -32,6 +32,14 @@ def _value_after_colon(line: str) -> str:
     return re.sub(r"^[^:]*:\s*", "", line)
 
 
+def _parse_boolean(line: str) -> bool:
+    value = re.sub(r"\s+#.*$", "", _value_after_colon(line))
+    value = re.sub(r"\s", "", value).lower()
+    if value not in ("true", "false"):
+        raise ValueError("[specify] Error: auto-commit booleans must be true or false")
+    return value == "true"
+
+
 def _strip_quotes(value: str) -> str:
     """Strip surrounding whitespace, then one leading quote and all trailing quotes.
 
@@ -59,6 +67,7 @@ def _parse_auto_commit_config(
     default_enabled = False
     in_auto_commit = False
     in_event = False
+    event_seen = False
 
     try:
         content = config_file.read_text(encoding="utf-8")
@@ -66,10 +75,7 @@ def _parse_auto_commit_config(
         # Unreadable or non-UTF-8 config is treated like a missing one:
         # auto-commit stays disabled instead of crashing with a traceback.
         return False, ""
-    for record in content.splitlines(keepends=True):
-        if not record.endswith("\n"):
-            break
-        line = record[:-1]
+    for line in content.splitlines():
         if line.startswith("auto_commit:"):
             in_auto_commit = True
             in_event = False
@@ -82,13 +88,12 @@ def _parse_auto_commit_config(
         if not in_auto_commit:
             continue
 
-        if re.match(r"^\s+default:\s", line):
-            value = re.sub(r"\s", "", _value_after_colon(line)).lower()
-            if value == "true":
-                default_enabled = True
+        if re.match(r"^\s+default:", line):
+            default_enabled = _parse_boolean(line)
 
         if re.match(rf"^\s+{re.escape(event_name)}:", line):
             in_event = True
+            event_seen = True
             continue
 
         if in_event:
@@ -97,21 +102,11 @@ def _parse_auto_commit_config(
                 in_event = False
                 continue
             if re.search(r"\s+enabled:", line):
-                value = re.sub(r"\s", "", _value_after_colon(line)).lower()
-                if value == "true":
-                    enabled = True
-                elif value == "false":
-                    enabled = False
+                enabled = _parse_boolean(line)
             if re.search(r"\s+message:", line):
                 commit_msg = _strip_quotes(_value_after_colon(line))
 
-    # If event-specific key not found, use default — but only if the event
-    # section didn't exist at all (an explicit false must win).
-    if not enabled and default_enabled:
-        if not re.search(rf"^\s*{re.escape(event_name)}:", content, re.MULTILINE):
-            enabled = True
-
-    return enabled, commit_msg
+    return (enabled if event_seen else default_enabled), commit_msg
 
 
 def main(argv: list[str]) -> int:
@@ -145,7 +140,11 @@ def main(argv: list[str]) -> int:
         # No config file — auto-commit disabled by default
         return 0
 
-    enabled, commit_msg = _parse_auto_commit_config(config_file, event_name)
+    try:
+        enabled, commit_msg = _parse_auto_commit_config(config_file, event_name)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     if not enabled:
         return 0
 

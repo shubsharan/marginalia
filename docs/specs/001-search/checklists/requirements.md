@@ -39,8 +39,9 @@
   ambiguity and selection. Story 3 covers failures and retries. Story 4 covers provenance and the
   search boundary. Edge Cases cover validation, identity reuse, limits, and configuration errors.
 - SC-001 through SC-006 define verification targets. Checked items mean the specification is ready
-  for planning, not full delivery. Phase 3 resolution/selection tests and the simplification checks
-  have run; full Search acceptance remains NOT RUN. See the quickstart for separate evidence.
+  for planning, not full delivery. Phase 7 acceptance subsequently passed with owner-confirmed
+  permission and human relevance judgments. See the [quickstart](../quickstart.md) for
+  revision-scoped evidence and limitations.
 - Assumptions state the initial series-level television scope, trusted local caller, and requirement
   to confirm all titles before search. The simplification preserves that behavior, makes current
   candidates directly inspectable, and applies provider approval to collection and saved metadata

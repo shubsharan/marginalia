@@ -164,28 +164,58 @@ export function startServer({
   });
 }
 
+export function startService(options: Parameters<typeof createWorker>[0] & { port?: number }) {
+  const { db } = options;
+  let server: ReturnType<typeof startServer>;
+  try {
+    server = startServer(options);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+  const worker = createWorker(options);
+  let stopping: Promise<void> | undefined;
+  function stop() {
+    return (stopping ??= (async () => {
+      const results = await Promise.allSettled([
+        Promise.resolve().then(() => server.stop(true)),
+        Promise.resolve().then(() => worker.stop()),
+      ]);
+      db.close();
+      for (const result of results) {
+        if (result.status === "rejected") throw result.reason;
+      }
+    })());
+  }
+  const done = worker.start().then(stop, async (error: unknown) => {
+    // Preserve the worker failure if cleanup also fails.
+    await Promise.allSettled([stop()]);
+    throw error;
+  });
+  return { server, stop, done };
+}
+
 if (import.meta.main) {
-  let db: Database | undefined;
   try {
     const config = loadConfig();
-    db = openDatabase(config.databasePath);
-    const server = startServer({ db, config });
-    const worker = createWorker({ db, config });
-    worker.start();
-    const connection = db;
-    let stopping = false;
-    async function stop() {
-      if (stopping) return;
-      stopping = true;
-      await worker.stop();
-      await server.stop(true);
-      connection.close();
-    }
+    const service = startService({ db: openDatabase(config.databasePath), config });
+    const stop = () => {
+      void service.stop().catch(() => {
+        // The lifetime promise reports shutdown failures through the main error handler.
+      });
+    };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
-    process.stdout.write(JSON.stringify({ listening: `http://127.0.0.1:${server.port}` }) + "\n");
+    try {
+      process.stdout.write(
+        JSON.stringify({ listening: `http://127.0.0.1:${service.server.port}` }) + "\n",
+      );
+      await service.done;
+    } finally {
+      process.removeListener("SIGINT", stop);
+      process.removeListener("SIGTERM", stop);
+    }
   } catch (error) {
-    db?.close();
     errorResponse(error);
     process.exitCode = 1;
   }

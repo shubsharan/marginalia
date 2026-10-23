@@ -259,15 +259,24 @@ describe("configuration and metadata policy", () => {
     expect(readiness.exa.ready).toBe(true);
   });
 
-  test("malformed policy and the committed template fail closed", () => {
+  test("malformed policy fails closed", () => {
     writeFileSync(join(directory, "metadata-policy.json"), `{${fakeSecret}`);
     expect(providerReadiness(config()).exa.metadataPolicyReady).toBe(false);
-    const template = loadConfig({
+  });
+
+  test("committed policy is approved while missing credentials block readiness", () => {
+    const committed = loadConfig({
       env: {},
       policyPath: join(APP_DIRECTORY, "metadata-policy.json"),
     });
-    expect(providerReadiness(template).tmdb.ready).toBe(false);
-    expect(providerReadiness(template).exa.ready).toBe(false);
+    for (const provider of Object.values(providerReadiness(committed))) {
+      expect(provider).toEqual({
+        credentialsConfigured: false,
+        metadataPolicyReady: true,
+        ready: false,
+        reasons: ["provider_credentials"],
+      });
+    }
   });
 });
 

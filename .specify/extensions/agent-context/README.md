@@ -6,6 +6,8 @@ It owns the lifecycle of the managed section delimited by the configurable start
 
 > NOTE: Spec Kit itself never touches your agent context file. This extension is the only thing that does, and it's opt-in: install it if you want the block kept in sync, skip it if you'd rather manage that file yourself.
 
+The updater appends a block when no markers exist or replaces one correctly ordered pair. Missing, reversed, or duplicate markers cause an error without writing the affected file. Correct the markers manually before retrying.
+
 ## Why an extension?
 
 Not every Spec Kit user wants Spec Kit to write into the coding agent's context file. Keeping this behavior in a dedicated, **opt-in** extension lets users:

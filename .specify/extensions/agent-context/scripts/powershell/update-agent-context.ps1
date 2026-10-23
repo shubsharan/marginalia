@@ -477,23 +477,21 @@ foreach ($ContextFile in $ContextFiles) {
         }
 
         $s = $content.IndexOf($MarkerStart)
-        $e = if ($s -ge 0) { $content.IndexOf($MarkerEnd, $s) } else { $content.IndexOf($MarkerEnd) }
+        $e = $content.IndexOf($MarkerEnd)
+        $startCount = [regex]::Matches($content, [regex]::Escape($MarkerStart)).Count
+        $endCount = [regex]::Matches($content, [regex]::Escape($MarkerEnd)).Count
 
-        if ($s -ge 0 -and $e -ge 0 -and $e -gt $s) {
+        if ($s -lt 0 -and $e -lt 0) {
+            if ($content -and -not $content.EndsWith("`n")) { $content += "`n" }
+            if ($content) { $newContent = $content + "`n" + $Section } else { $newContent = $Section }
+        } elseif ($startCount -eq 1 -and $endCount -eq 1 -and $e -gt $s) {
             $endOfMarker = $e + $MarkerEnd.Length
             if ($endOfMarker -lt $content.Length -and $content[$endOfMarker] -eq "`r") { $endOfMarker++ }
             if ($endOfMarker -lt $content.Length -and $content[$endOfMarker] -eq "`n") { $endOfMarker++ }
             $newContent = $content.Substring(0, $s) + $Section + $content.Substring($endOfMarker)
-        } elseif ($s -ge 0) {
-            $newContent = $content.Substring(0, $s) + $Section
-        } elseif ($e -ge 0) {
-            $endOfMarker = $e + $MarkerEnd.Length
-            if ($endOfMarker -lt $content.Length -and $content[$endOfMarker] -eq "`r") { $endOfMarker++ }
-            if ($endOfMarker -lt $content.Length -and $content[$endOfMarker] -eq "`n") { $endOfMarker++ }
-            $newContent = $Section + $content.Substring($endOfMarker)
         } else {
-            if ($content -and -not $content.EndsWith("`n")) { $content += "`n" }
-            if ($content) { $newContent = $content + "`n" + $Section } else { $newContent = $Section }
+            Write-Warning "agent-context: malformed markers in $CtxPath; fix the markers manually. File not modified."
+            exit 1
         }
     } else {
         $newContent = $Section

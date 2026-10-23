@@ -57,31 +57,27 @@ done
 
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-_find_project_root() {
-    local dir="$1"
-    while [ "$dir" != "/" ]; do
-        if [ -d "$dir/.specify" ] || [ -d "$dir/.git" ]; then
-            echo "$dir"
-            return 0
-        fi
-        dir="$(dirname "$dir")"
-    done
-    return 1
-}
-
-REPO_ROOT=$(_find_project_root "$SCRIPT_DIR") || REPO_ROOT="$(pwd)"
-cd "$REPO_ROOT"
-
 # Check if git is available
 if ! command -v git >/dev/null 2>&1; then
     echo "[specify] Warning: Git not found; skipped auto-commit" >&2
     exit 0
 fi
 
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if ! REPO_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null); then
     echo "[specify] Warning: Not a Git repository; skipped auto-commit" >&2
     exit 0
 fi
+
+cd "$REPO_ROOT"
+
+parse_boolean() {
+    local value
+    value=$(printf '%s\n' "$1" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]\{1,\}#.*$//' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+    case "$value" in
+        true|false) printf '%s\n' "$value" ;;
+        *) echo "[specify] Error: auto-commit booleans must be true or false" >&2; return 1 ;;
+    esac
+}
 
 # Read per-command config from git-config.yml
 _config_file="$REPO_ROOT/.specify/extensions/git/git-config.yml"
@@ -109,8 +105,9 @@ if [ -f "$_config_file" ]; then
     _in_auto_commit=false
     _in_event=false
     _default_enabled=false
+    _event_seen=false
 
-    while IFS= read -r _line; do
+    while IFS= read -r _line || [ -n "$_line" ]; do
         # Detect auto_commit: section
         if echo "$_line" | grep -q '^auto_commit:'; then
             _in_auto_commit=true
@@ -125,14 +122,14 @@ if [ -f "$_config_file" ]; then
 
         if $_in_auto_commit; then
             # Check default key
-            if echo "$_line" | grep -Eq "^[[:space:]]+default:[[:space:]]"; then
-                _val=$(echo "$_line" | sed 's/^[^:]*:[[:space:]]*//' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-                [ "$_val" = "true" ] && _default_enabled=true
+            if echo "$_line" | grep -Eq "^[[:space:]]+default:"; then
+                _default_enabled=$(parse_boolean "$_line")
             fi
 
             # Detect our event subsection
             if echo "$_line" | grep -Eq "^[[:space:]]+${EVENT_NAME}:"; then
                 _in_event=true
+                _event_seen=true
                 continue
             fi
 
@@ -144,9 +141,7 @@ if [ -f "$_config_file" ]; then
                     continue
                 fi
                 if echo "$_line" | grep -Eq '[[:space:]]+enabled:'; then
-                    _val=$(echo "$_line" | sed 's/^[^:]*:[[:space:]]*//' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-                    [ "$_val" = "true" ] && _enabled=true
-                    [ "$_val" = "false" ] && _enabled=false
+                    _enabled=$(parse_boolean "$_line")
                 fi
                 if echo "$_line" | grep -Eq '[[:space:]]+message:'; then
                     # Trim trailing whitespace before stripping the closing quote:
@@ -160,13 +155,8 @@ if [ -f "$_config_file" ]; then
         fi
     done < "$_config_file"
 
-    # If event-specific key not found, use default
-    if [ "$_enabled" = "false" ] && [ "$_default_enabled" = "true" ]; then
-        # Only use default if the event wasn't explicitly set to false
-        # Check if event section existed at all
-        if ! grep -q "^[[:space:]]*${EVENT_NAME}:" "$_config_file" 2>/dev/null; then
-            _enabled=true
-        fi
+    if [ "$_event_seen" = "false" ]; then
+        _enabled=$_default_enabled
     fi
 else
     # No config file — auto-commit disabled by default

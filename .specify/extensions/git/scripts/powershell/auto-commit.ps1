@@ -84,6 +84,15 @@ if (-not $isRepo) {
     exit 0
 }
 
+function Read-AutoCommitBoolean {
+    param([string]$Value)
+    $value = (($Value -replace '\s+#.*$', '') -replace '\s', '').ToLower()
+    if ($value -notin @('true', 'false')) {
+        throw "[specify] Error: auto-commit booleans must be true or false"
+    }
+    return $value -eq 'true'
+}
+
 # Read per-command config from git-config.yml
 $configFile = Join-Path $repoRoot ".specify/extensions/git/git-config.yml"
 $enabled = $false
@@ -111,6 +120,7 @@ if (Test-Path $configFile) {
     $inAutoCommit = $false
     $inEvent = $false
     $defaultEnabled = $false
+    $eventSeen = $false
 
     foreach ($line in Get-Content $configFile) {
         # Detect auto_commit: section
@@ -127,14 +137,14 @@ if (Test-Path $configFile) {
 
         if ($inAutoCommit) {
             # Check default key
-            if ($line -match '^\s+default:\s*(.+)$') {
-                $val = $matches[1].Trim().ToLower()
-                if ($val -eq 'true') { $defaultEnabled = $true }
+            if ($line -match '^\s+default:\s*(.*)$') {
+                $defaultEnabled = Read-AutoCommitBoolean $matches[1]
             }
 
             # Detect our event subsection
             if ($line -match "^\s+${EventName}:") {
                 $inEvent = $true
+                $eventSeen = $true
                 continue
             }
 
@@ -145,10 +155,8 @@ if (Test-Path $configFile) {
                     $inEvent = $false
                     continue
                 }
-                if ($line -match '\s+enabled:\s*(.+)$') {
-                    $val = $matches[1].Trim().ToLower()
-                    if ($val -eq 'true') { $enabled = $true }
-                    if ($val -eq 'false') { $enabled = $false }
+                if ($line -match '\s+enabled:\s*(.*)$') {
+                    $enabled = Read-AutoCommitBoolean $matches[1]
                 }
                 if ($line -match '\s+message:\s*(.+)$') {
                     $commitMsg = $matches[1].Trim() -replace '^["'']' -replace '["'']$'
@@ -157,12 +165,8 @@ if (Test-Path $configFile) {
         }
     }
 
-    # If event-specific key not found, use default
-    if (-not $enabled -and $defaultEnabled) {
-        $hasEventKey = Select-String -Path $configFile -Pattern "^\s*${EventName}:" -Quiet
-        if (-not $hasEventKey) {
-            $enabled = $true
-        }
+    if (-not $eventSeen) {
+        $enabled = $defaultEnabled
     }
 } else {
     # No config file -- auto-commit disabled by default

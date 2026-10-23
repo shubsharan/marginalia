@@ -422,6 +422,13 @@ minutes, checkout revision, request ID, and artifact paths. Capture duration alo
 and cannot establish the 30-minute target. Follow the restart, retry, and boundary scenarios in this
 guide and the deterministic acceptance matrix for the remaining criteria.
 
+## Fatal worker failures
+
+An unexpected worker failure stops the service and exits nonzero with sanitized diagnostics. Correct
+the cause and restart with the normal start command. Pending work resumes; running attempts retain
+their persisted deadlines and require explicit retry after interruption. Provider errors and
+recoverable publication errors remain visible operation failures without stopping the service.
+
 ## Initial Phase 7 deterministic verification
 
 On 2026-10-23, Bun 1.4.2 passed 150 tests and 959 assertions across `body.test.ts`,

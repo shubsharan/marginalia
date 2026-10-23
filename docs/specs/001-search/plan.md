@@ -159,9 +159,10 @@ TypeScript config, formatter, and linter. Direct app commands suffice; this plan
 Turborepo changes.
 
 Sanitized TMDB and Exa fixtures cover resolution and metadata search. The predeclared live
-corpus/relevance rubric and capture/score evaluator are implemented; live quality remains
-unverified. Preserve unrelated working-tree changes. This simplification adds no dependencies,
-public hosting, UI, or additional Search phases.
+corpus/relevance rubric and capture/score evaluator are implemented. Owner-reviewed live evaluation
+passed; the quickstart records evidence revisions and limitations. Hono, Zod, and neverthrow are
+adopted dependencies. Preserve unrelated working-tree changes. Public hosting, UI, and additional
+Search phases remain outside this feature.
 
 ## Validation coverage
 

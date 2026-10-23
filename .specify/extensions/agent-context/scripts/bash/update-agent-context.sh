@@ -418,27 +418,21 @@ if os.path.exists(ctx_path):
     with open(ctx_path, "r", encoding="utf-8-sig") as fh:
         content = fh.read()
     s = content.find(start)
-    e = content.find(end, s if s != -1 else 0)
-    if s != -1 and e != -1 and e > s:
+    e = content.find(end)
+    if s == -1 and e == -1:
+        if content and not content.endswith("\n"):
+            content += "\n"
+        new_content = (content + "\n" + section) if content else section
+    elif content.count(start) == 1 and content.count(end) == 1 and e > s:
         end_of_marker = e + len(end)
         if end_of_marker < len(content) and content[end_of_marker] == "\r":
             end_of_marker += 1
         if end_of_marker < len(content) and content[end_of_marker] == "\n":
             end_of_marker += 1
         new_content = content[:s] + section + content[end_of_marker:]
-    elif s != -1:
-        new_content = content[:s] + section
-    elif e != -1:
-        end_of_marker = e + len(end)
-        if end_of_marker < len(content) and content[end_of_marker] == "\r":
-            end_of_marker += 1
-        if end_of_marker < len(content) and content[end_of_marker] == "\n":
-            end_of_marker += 1
-        new_content = section + content[end_of_marker:]
     else:
-        if content and not content.endswith("\n"):
-            content += "\n"
-        new_content = (content + "\n" + section) if content else section
+        print("agent-context: malformed markers in " + ctx_path + "; fix the markers manually. File not modified.", file=sys.stderr)
+        sys.exit(1)
 else:
     new_content = section
 

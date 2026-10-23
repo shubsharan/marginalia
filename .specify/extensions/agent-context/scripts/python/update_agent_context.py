@@ -264,27 +264,27 @@ def _upsert_section(
         with open(ctx_path, "r", encoding="utf-8-sig") as fh:
             content = fh.read()
         s = content.find(marker_start)
-        e = content.find(marker_end, s if s != -1 else 0)
-        if s != -1 and e != -1 and e > s:
+        e = content.find(marker_end)
+        if s == -1 and e == -1:
+            if content and not content.endswith("\n"):
+                content += "\n"
+            new_content = (content + "\n" + section) if content else section
+        elif (
+            content.count(marker_start) == 1
+            and content.count(marker_end) == 1
+            and e > s
+        ):
             end_of_marker = e + len(marker_end)
             if end_of_marker < len(content) and content[end_of_marker] == "\r":
                 end_of_marker += 1
             if end_of_marker < len(content) and content[end_of_marker] == "\n":
                 end_of_marker += 1
             new_content = content[:s] + section + content[end_of_marker:]
-        elif s != -1:
-            new_content = content[:s] + section
-        elif e != -1:
-            end_of_marker = e + len(marker_end)
-            if end_of_marker < len(content) and content[end_of_marker] == "\r":
-                end_of_marker += 1
-            if end_of_marker < len(content) and content[end_of_marker] == "\n":
-                end_of_marker += 1
-            new_content = section + content[end_of_marker:]
         else:
-            if content and not content.endswith("\n"):
-                content += "\n"
-            new_content = (content + "\n" + section) if content else section
+            raise ValueError(
+                "agent-context: malformed markers in " + ctx_path
+                + "; fix the markers manually. File not modified."
+            )
     else:
         new_content = section
 
@@ -358,7 +358,11 @@ def main(argv: list[str] | None = None) -> int:
     for context_file in context_files:
         ctx_path = os.path.join(project_root, context_file)
         os.makedirs(os.path.dirname(ctx_path) or ".", exist_ok=True)
-        _upsert_section(ctx_path, marker_start, marker_end, section)
+        try:
+            _upsert_section(ctx_path, marker_start, marker_end, section)
+        except ValueError as exc:
+            _err(str(exc))
+            return 1
         print(f"agent-context: updated {context_file}")
 
     return 0

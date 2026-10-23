@@ -139,8 +139,10 @@ Legacy `retainedFields` or `displayedFields` entries are rejected. To convert a 
 record, review retention and display of the complete fixed set, record its basis/date and a new
 revision, then remove the legacy arrays. Removing arrays alone does not establish approval. Restart
 after changing the file. Expanding the fixed contract requires renewed approval. The committed
-template remains unreviewed; fixtures use clearly marked test-only approval. Caller requests cannot
-override policy.
+policy records owner-confirmed approval under revision `owner-confirmed-2026-10-23-v1`; agreement
+text was not independently reviewed. Fixtures use clearly marked test-only approval. Caller requests
+cannot override policy. See the [quickstart](../quickstart.md) for revision-scoped acceptance
+evidence.
 
 Known restrictive notices reject affected metadata when retention/display is prohibited or unclear.
 Response-wide restrictions fail the operation with `metadata_restricted`. Ordinary search-quality

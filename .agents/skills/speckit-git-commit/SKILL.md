@@ -51,14 +51,19 @@ In `.specify/extensions/git/git-config.yml`:
 commit_style: fixed
 
 auto_commit:
-  default: false          # Global toggle — set true to enable for all commands
+  # Global toggle: set true to enable for all commands
+  default: false
   after_specify:
-    enabled: true          # Override per-command
+    # Override per-command
+    enabled: true
     message: "[Spec Kit] Add specification"
   after_plan:
     enabled: false
     message: "[Spec Kit] Add implementation plan"
 ```
+
+Boolean settings accept trailing comments and reject invalid values before staging.
+An event section overrides the global default, including when it omits `enabled`.
 
 ## Graceful Degradation
 

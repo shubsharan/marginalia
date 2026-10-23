@@ -244,6 +244,8 @@ if (Get-Command Get-RepoRoot -ErrorAction SilentlyContinue) {
     throw "Could not determine repository root."
 }
 
+Set-Location $repoRoot
+
 # Check if git is available
 if (Get-Command Test-HasGit -ErrorAction SilentlyContinue) {
     # Call without parameters for compatibility with core common.ps1 (no -RepoRoot param)
@@ -257,8 +259,6 @@ if (Get-Command Test-HasGit -ErrorAction SilentlyContinue) {
         $hasGit = $false
     }
 }
-
-Set-Location $repoRoot
 
 $specsDir = Join-Path $repoRoot 'specs'
 $configFile = Join-Path $repoRoot ".specify/extensions/git/git-config.yml"

@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { setTimeout as delay } from "node:timers/promises";
 import { LIMITS, type Config } from "./config.ts";
 import { resolveTitle, type TmdbFetch, type WorkType } from "./providers/tmdb.ts";
 import { searchQuery, searchSources, type SearchFailure } from "./providers/exa.ts";
@@ -24,8 +25,9 @@ export function createWorker({
   fetch?: TmdbFetch;
 }) {
   let active: Promise<boolean> | null = null;
-  let timer: ReturnType<typeof setInterval> | undefined;
-  let controller: AbortController | null = null;
+  let lifetime: Promise<void> | undefined;
+  let stopped: Promise<void> | undefined;
+  const shutdown = new AbortController();
   let stopping = false;
 
   function claim(): Attempt | null {
@@ -167,9 +169,8 @@ export function createWorker({
   async function perform() {
     const attempt = claim();
     if (!attempt) return false;
-    controller = new AbortController();
     const signal = AbortSignal.any([
-      controller.signal,
+      shutdown.signal,
       AbortSignal.timeout(Math.max(1, Date.parse(attempt.deadlineAt) - Date.now())),
     ]);
     try {
@@ -197,8 +198,6 @@ export function createWorker({
     } catch (error) {
       if (!(error instanceof Error) || error.name !== "SQLiteError") throw error;
       fail(attempt, { code: "storage_unavailable", retryAt: null }, false);
-    } finally {
-      controller = null;
     }
     return true;
   }
@@ -213,33 +212,34 @@ export function createWorker({
     return active;
   }
 
-  function tick() {
-    void runOnce().catch(() => {
-      stopping = true;
-      clearInterval(timer);
-      process.stderr.write(
-        JSON.stringify({
-          level: "error",
-          code: "storage_unavailable",
-          component: "search_worker",
-        }) + "\n",
-      );
-    });
+  async function run() {
+    while (!stopping) {
+      await runOnce();
+      if (stopping) break;
+      try {
+        await delay(LIMITS.recoveryIntervalMs, undefined, { signal: shutdown.signal });
+      } catch (error) {
+        if (!(error instanceof Error && error.name === "AbortError" && stopping)) throw error;
+      }
+    }
   }
 
   return {
     runOnce,
     start() {
-      if (timer || stopping) return;
-      timer = setInterval(tick, LIMITS.recoveryIntervalMs);
-      tick();
+      return (lifetime ??= run());
     },
-    async stop() {
+    stop() {
       stopping = true;
-      clearInterval(timer);
-      controller?.abort();
-      await active;
-      recoverExpired(db);
+      shutdown.abort();
+      return (stopped ??= (async () => {
+        try {
+          await active;
+          await lifetime;
+        } finally {
+          recoverExpired(db);
+        }
+      })());
     },
   };
 }

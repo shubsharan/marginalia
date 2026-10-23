@@ -4,7 +4,9 @@
 
 **Created**: 2026-10-22
 
-**Status**: Implemented through Phase 6; Phase 7 polish and full acceptance remain planned.
+**Status**: Tasks T001-T040 are complete. Phase 7 acceptance passed with owner-confirmed permission
+and human relevance judgments. See the [quickstart](quickstart.md) for revision-scoped evidence and
+limitations.
 
 **Input**: User description: "docs/roadmap.md #1, Search"
 

@@ -43,6 +43,12 @@ local configuration, not verified provider access or legal permission. Startup r
 migration before opening storage and checks version/checksum compatibility and SQLite integrity. It
 does not inventory individual columns or triggers. Later storage failures return a safe 503 error.
 
+The HTTP server and worker share one service lifetime. An unexpected worker failure stops HTTP
+admission, cancels active work, closes storage, and terminates the process with a nonzero status.
+Expected provider failures and recoverable publication failures remain operation outcomes. Restart
+explicitly after correcting the cause; persisted attempts retain the existing deadline and explicit
+retry rules. SIGINT and SIGTERM use the same cleanup path.
+
 ## Limits and pagination
 
 Accept a JSON body up to 16 KiB with 1-20 inputs. A title must have 1-300 trimmed characters;

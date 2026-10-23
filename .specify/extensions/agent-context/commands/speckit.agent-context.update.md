@@ -17,11 +17,13 @@ The script reads the agent-context extension config at
 
 It then creates, replaces, or appends the managed block so that the section points at the most recent plan path when one can be discovered (any `plan.md` under `specs/`, including nested scoped layouts such as `specs/<scope>/<feature>/plan.md`).
 
-If `context_files` and `context_file` are empty, the command reports nothing to do and exits successfully. Context file paths must stay project-relative; absolute paths, Windows drive paths, backslash separators, and `..` path segments are rejected.
+If `context_files` and `context_file` are empty, the script reads the integration from `.specify/init-options.json` and uses its entry in `agent-context-defaults.json`. It exits successfully without updating files when no default is known. Context file paths must stay project-relative; absolute paths, Windows drive paths, backslash separators, and `..` path segments are rejected.
 
 ## Execution
 
 - **Bash**: `.specify/extensions/agent-context/scripts/bash/update-agent-context.sh [plan_path]`
 - **PowerShell**: `.specify/extensions/agent-context/scripts/powershell/update-agent-context.ps1 [plan_path]`
 
-When `plan_path` is omitted, the script auto-detects the most recently modified `specs/**/plan.md` (searched recursively, so nested scoped layouts are discovered).
+When `plan_path` is omitted, the script first uses `.specify/feature.json` to locate the plan. If that plan is unavailable, it uses the most recently modified `specs/**/plan.md`, searched recursively.
+
+The script appends a block when no markers exist or replaces one correctly ordered marker pair. Malformed markers cause an error without writing the affected file. Correct the markers manually before retrying.
