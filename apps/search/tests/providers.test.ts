@@ -32,6 +32,43 @@ async function resolveSuccess(input: Parameters<typeof resolveTitle>[0]) {
 }
 
 describe("TMDB resolution", () => {
+  test("restrictive notices block response-wide metadata and omit restricted candidates", async () => {
+    for (const code of [
+      "METADATA_RESTRICTED",
+      "RETENTION_PROHIBITED",
+      "DISPLAY_PROHIBITED",
+      "METADATA_RETENTION_PROHIBITED",
+      "METADATA_DISPLAY_PROHIBITED",
+    ]) {
+      for (const field of ["notices", "warnings"]) {
+        const result = await resolveTitle({
+          input: { title: "Heat" },
+          provider,
+          fetch: async (url) =>
+            Response.json({
+              ...(url.pathname.endsWith("tv") ? fixtures.tv : fixtures.movies),
+              ...(url.pathname.endsWith("tv") ? { [field]: [{ code, message: "FORBIDDEN" }] } : {}),
+            }),
+        });
+        expect(result._unsafeUnwrapErr()).toEqual({ code: "metadata_restricted", retryAt: null });
+        const allowed = await resolveSuccess({
+          input: { title: "Heat", workType: "film" },
+          provider,
+          fetch: async () =>
+            Response.json({
+              results: [
+                { id: 1, title: "FORBIDDEN", [field]: [{ code, message: "FORBIDDEN" }] },
+                { id: 2, title: "Allowed", notices: [{ code: "UNKNOWN_QUALITY_NOTICE" }] },
+              ],
+            }),
+        });
+        expect(allowed.candidates.map((candidate) => candidate.providerId)).toEqual([2]);
+        expect(allowed.endpoints[0]).toMatchObject({ returnedCount: 2, retainedCount: 1 });
+        expect(JSON.stringify(allowed)).not.toContain("FORBIDDEN");
+      }
+    }
+  });
+
   test("synchronous fetch exceptions become typed failures without raw secrets", async () => {
     const result = await resolveTitle({
       input: { title: "Heat", workType: "film" },

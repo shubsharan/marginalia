@@ -4,8 +4,7 @@
 
 **Created**: 2026-10-22
 
-**Status**: Partially implemented through Phase 5; remaining metadata checks and full acceptance are
-planned.
+**Status**: Implemented through Phase 6; Phase 7 polish and full acceptance remain planned.
 
 **Input**: User description: "docs/roadmap.md #1, Search"
 

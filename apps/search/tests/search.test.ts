@@ -821,6 +821,137 @@ function searchSetup(
   return { ...s, calls, confirm };
 }
 
+describe("US4 metadata provenance and boundaries", () => {
+  test("a restriction on the second resolution endpoint publishes no candidate metadata", async () => {
+    const forbidden = "FORBIDDEN-restricted-tmdb";
+    const s = resolutionSetup(async (url) =>
+      Response.json({
+        ...(url.pathname.endsWith("movie") ? tmdbFixtures.movies : tmdbFixtures.tv),
+        ...(url.pathname.endsWith("tv")
+          ? { notices: [{ code: "RETENTION_PROHIBITED", message: forbidden }] }
+          : {}),
+      }),
+    );
+    const id = await s.submit([{ title: "Heat" }]);
+    await s.worker.runOnce();
+    const summary = await s.summary(id);
+    expect(summary).toMatchObject({
+      status: "blocked",
+      operationCounts: { failed: 1 },
+      nextActions: [{ action: "review_metadata_policy", errorCode: "metadata_restricted" }],
+    });
+    expect(s.db.query("SELECT count(*) n FROM resolution_candidates").get()).toEqual({ n: 0 });
+    expect(s.db.serialize().includes(Buffer.from(forbidden))).toBe(false);
+    expect(JSON.stringify(summary)).not.toContain(forbidden);
+  });
+
+  test("changed metadata keeps earlier observations and rejected payloads never enter storage, logs or reads", async () => {
+    const forbidden = "FORBIDDEN-source-payload";
+    let searches = 0;
+    const s = searchSetup(async () =>
+      Response.json({
+        requestId: `fixture-${++searches}`,
+        results: [
+          {
+            url: "https://example.com/shared",
+            ...(searches === 1
+              ? {}
+              : { title: "Later title", author: "Later author", publishedDate: "2026-10-23" }),
+            text: forbidden,
+            highlights: [forbidden],
+            summary: forbidden,
+            claims: [forbidden],
+            processingPermission: "granted",
+            displayPermission: "granted",
+          },
+          {
+            url: `https://example.com/${forbidden}`,
+            title: forbidden,
+            notices: [{ code: "DISPLAY_PROHIBITED", message: forbidden }],
+          },
+          { url: `http://127.0.0.1/${forbidden}`, text: forbidden },
+        ],
+      }),
+    );
+    let diagnostics = "";
+    const log = spyOn(process.stderr, "write").mockImplementation((chunk) => {
+      diagnostics += String(chunk);
+      return true;
+    });
+    try {
+      const first = await s.submit();
+      await s.worker.runOnce();
+      await s.confirm(first);
+      await s.worker.runOnce();
+      const source = (await s.api(`/${first}/sources`)).body.items[0];
+      const path = `/v1/sources/${source.id}/observations`;
+      const before = JSON.parse(
+        (await http(s.server, { path: `${path}?requestId=${first}` })).text,
+      );
+      expect(before.items[0]).toMatchObject({
+        title: null,
+        author: null,
+        publisher: null,
+        publicationDate: null,
+        providerRequestId: "fixture-1",
+        rank: 1,
+        kind: "source_candidate",
+        relevanceVerified: false,
+      });
+      const second = await s.submit();
+      await s.worker.runOnce();
+      await s.confirm(second);
+      await s.worker.runOnce();
+      const after = JSON.parse((await http(s.server, { path: `${path}?requestId=${first}` })).text);
+      expect(after.items).toEqual(before.items);
+      const later = JSON.parse(
+        (await http(s.server, { path: `${path}?requestId=${second}` })).text,
+      );
+      expect(later.items[0]).toMatchObject({
+        title: "Later title",
+        author: "Later author",
+        publicationDate: "2026-10-23",
+        providerRequestId: "fixture-2",
+      });
+      expect((await s.api(`/${second}/sources`)).body.items[0]).toEqual({
+        ...source,
+        observationsUrl: `${path}?requestId=${second}`,
+      });
+      for (const id of [first, second]) {
+        const summary = await s.summary(id);
+        expect(summary.coverage[0]).toMatchObject({
+          returnedCount: 3,
+          retainedCount: 1,
+          rejectedCount: 2,
+        });
+        expect(JSON.stringify(summary)).not.toContain(forbidden);
+      }
+      expect(
+        s.db.query("SELECT ordinal, reason_code FROM rejected_results ORDER BY seq").all(),
+      ).toEqual([
+        { ordinal: 1, reason_code: "metadata_restricted" },
+        { ordinal: 2, reason_code: "invalid_source_url" },
+        { ordinal: 1, reason_code: "metadata_restricted" },
+        { ordinal: 2, reason_code: "invalid_source_url" },
+      ]);
+      const detail = JSON.parse((await http(s.server, { path: `/v1/sources/${source.id}` })).text);
+      expect(detail).toMatchObject({
+        processingPermission: "unknown",
+        displayPermission: "unknown",
+        relevanceVerified: false,
+      });
+      for (const output of [JSON.stringify([before, after, later, detail]), diagnostics])
+        expect(output).not.toContain(forbidden);
+      expect(s.db.serialize().includes(Buffer.from(forbidden))).toBe(false);
+      expect(
+        s.db.query("SELECT processing_permission, display_permission FROM sources").all(),
+      ).toEqual([{ processing_permission: "unknown", display_permission: "unknown" }]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
 describe("US3 failure status and selective retry", () => {
   test("partial success retries only the failure and preserves completed observations", async () => {
     let failing = true;
@@ -1259,6 +1390,9 @@ describe("US1 persisted source search", () => {
     } finally {
       network.mockRestore();
     }
+    const localSummary = JSON.parse(
+      (await http(offline, { path: `/v1/search-requests/${id}` })).text,
+    );
     offlineConfig.providers.exa.policy = null;
     expect((await http(offline, { path: `/v1/sources/${sourceId}` })).status).toBe(503);
     expect((await http(offline, { path: `/v1/search-requests/${id}/sources` })).status).toBe(503);
@@ -1268,7 +1402,9 @@ describe("US1 persisted source search", () => {
     offlineConfig.providers.tmdb.policy = null;
     expect((await http(offline, { path: `/v1/works/${works.body.items[0].id}` })).status).toBe(503);
     expect((await http(offline, { path: `/v1/search-requests/${id}/works` })).status).toBe(503);
-    expect((await http(offline, { path: `/v1/search-requests/${id}` })).status).toBe(200);
+    const localRead = await http(offline, { path: `/v1/search-requests/${id}` });
+    expect(localRead.status).toBe(200);
+    expect(JSON.parse(localRead.text)).toEqual(localSummary);
     expect((await http(offline, { path: "/v1/search-requests" })).status).toBe(200);
   });
 

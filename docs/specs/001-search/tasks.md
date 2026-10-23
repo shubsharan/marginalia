@@ -7,10 +7,9 @@
 [provider contract](contracts/providers.md), and [quickstart.md](quickstart.md). Follow
 `.specify/memory/constitution.md` version 3.0.0.
 
-**Status**: Search is partially implemented through Phase 5. Simplification tasks T037-T040 and
-tasks T001-T027 are complete and cover T030's source-observation reads. Remaining metadata checks
-and acceptance stay planned. Current verification is recorded separately in
-[quickstart.md](quickstart.md).
+**Status**: Search is implemented through Phase 6. Simplification tasks T037-T040 and tasks
+T001-T031 are complete. Phase 7 polish and acceptance stay planned. Current verification is recorded
+in [quickstart.md](quickstart.md).
 
 **Historical Phase 3 evidence**: On 2026-10-23, Bun 1.4.2 passed 82 tests and 408 assertions against
 sanitized fixtures, temporary databases, and loopback HTTP servers. US2 checks cover bounded TMDB
@@ -276,11 +275,11 @@ status remain readable.
 
 ### Tests
 
-- [ ] T028 [P] [US4] Audit `apps/search/tests/providers.test.ts` against the fixed metadata contract
+- [x] T028 [P] [US4] Audit `apps/search/tests/providers.test.ts` against the fixed metadata contract
       for both providers. Reuse existing Exa notice, optional-field, content-filtering, approval,
       and redaction checks; add only uncovered cases, including TMDB restrictive-notice handling.
       Record coverage without duplicating tests or fetching source pages.
-- [ ] T029 [P] [US4] Verify in `apps/search/tests/search.test.ts` that later searches returning
+- [x] T029 [P] [US4] Verify in `apps/search/tests/search.test.ts` that later searches returning
       changed metadata preserve the original request's observations. Reuse existing shared-source,
       pagination, request-filtering, rejection-count, and historical approval checks. Add only
       missing assertions for explicit nulls, absent raw rejected URLs, and no bodies, claims, or
@@ -290,7 +289,7 @@ status remain readable.
 
 - [x] T030 [US4] Source-observation reads are covered by T020 and Phase 4 verification in
       [quickstart.md](quickstart.md).
-- [ ] T031 [US4] Fix only metadata gaps exposed by T028-T029 in `apps/search/src/config.ts`,
+- [x] T031 [US4] Fix only metadata gaps exposed by T028-T029 in `apps/search/src/config.ts`,
       `apps/search/src/providers/tmdb.ts`, `apps/search/src/providers/exa.ts`, or the owning
       saved-read code. Preserve fixed fields, approval gates, safe warnings, and the ban on source
       text and synthesis. Run the existing and added US4 checks in

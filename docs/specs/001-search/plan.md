@@ -4,9 +4,9 @@
 
 **Input**: `docs/specs/001-search/spec.md`
 
-Status: Tasks T001-T027 are implemented through Phase 5. TMDB resolution, explicit selection,
-bounded Exa execution, saved result reads, retry, and crash recovery are available. Remaining
-metadata checks and acceptance work stay planned. Spec Kit reports logical branch `001-search`; the
+Status: Tasks T001-T031 are implemented through Phase 6. TMDB resolution, explicit selection,
+bounded Exa execution, saved result reads, retry, crash recovery, and metadata checks are available.
+Phase 7 polish and acceptance work stay planned. Spec Kit reports logical branch `001-search`; the
 actual Git branch includes `feat-`. The simplification pass T037-T040 changes current-candidate
 reads, provider approval, and storage configuration only; it does not implement later Search phases.
 
@@ -121,6 +121,7 @@ apps/search/
   src/worker.ts
   src/providers/tmdb.ts
   src/providers/exa.ts
+  src/providers/notices.ts
   tests/fixtures/
   tests/body.test.ts
   tests/search.test.ts

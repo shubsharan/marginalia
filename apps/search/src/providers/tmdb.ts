@@ -2,6 +2,7 @@ import { err, ok, ResultAsync, type Result } from "neverthrow";
 import { z } from "zod";
 import { boundedText, calendarDateSchema, LIMITS, type Config } from "../config.ts";
 import { readBoundedJson } from "../body.ts";
+import { noticeCodes, restrictiveNotices } from "./notices.ts";
 
 const workTypeSchema = z.enum(["film", "television_series"]);
 export const resolutionInputSchema = z.strictObject({
@@ -61,6 +62,8 @@ const envelopeSchema = z.object({
   page: z.literal(1).optional(),
   total_pages: z.int().min(0).optional(),
   total_results: z.int().min(0).optional(),
+  notices: z.unknown().optional(),
+  warnings: z.unknown().optional(),
 });
 const candidateSchema = z.object({
   id: z.int().positive(),
@@ -74,6 +77,8 @@ const candidateSchema = z.object({
   first_air_date: z.unknown().optional(),
   original_language: z.unknown().optional(),
   origin_country: z.unknown().optional(),
+  notices: z.unknown().optional(),
+  warnings: z.unknown().optional(),
 });
 const countriesSchema = z.array(z.string().regex(/^[A-Z]{2}$/)).max(LIMITS.maxCountries);
 const invalidResponse: ProviderFailure = { code: "provider_response_invalid", retryAt: null };
@@ -124,6 +129,8 @@ function parseCandidate({
   const parsed = candidateSchema.safeParse(raw);
   if (!parsed.success) return err(invalidResponse);
   const data = parsed.data;
+  if (noticeCodes(data.notices, data.warnings).some((code) => restrictiveNotices.has(code)))
+    return ok(null);
   if (data.media_type !== undefined && data.media_type !== mediaType) return err(invalidResponse);
   const movie = mediaType === "movie";
   const title = boundedText(LIMITS.maxMetadataTitleChars).safeParse(data[movie ? "title" : "name"]);
@@ -219,6 +226,8 @@ export async function resolveTitle({
     const payload = envelopeSchema.safeParse(body.value);
     if (!payload.success) return err(invalidResponse);
     const data = payload.data;
+    if (noticeCodes(data.notices, data.warnings).some((code) => restrictiveNotices.has(code)))
+      return err({ code: "metadata_restricted", retryAt: null });
     const candidates: Candidate[] = [];
     const seen = new Set<number>();
     const retrievedAt = new Date().toISOString();

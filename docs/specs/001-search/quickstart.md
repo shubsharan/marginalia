@@ -1,9 +1,9 @@
 # Validate search
 
-This is the implementation acceptance guide. Phase 5 adds selective retry and crash recovery to the
-implemented TMDB resolution, explicit selection, Exa Search, and saved reads. Remaining metadata
-checks and full acceptance stay planned. No live provider or permission claim follows from the
-fixture results.
+This is the implementation acceptance guide. Phase 6 verifies metadata provenance and adds TMDB
+restrictive-notice handling to the implemented resolution, selection, Exa Search, saved reads,
+retry, and recovery. Phase 7 polish and full acceptance stay planned. No live provider or permission
+claim follows from the fixture results.
 
 ## Historical Phase 3 verification
 
@@ -152,6 +152,47 @@ retry. These checks establish local publication and recovery behavior, not exact
 execution. Phase 6 metadata edge cases and Phase 7 acceptance remain pending. Live provider
 compatibility, retention/display permission review, relevance, and setup timing remain NOT RUN.
 SC-001 through SC-006 remain NOT RUN as full-feature acceptance criteria.
+
+## Phase 6 verification
+
+On 2026-10-23, Bun 1.4.2 passed 147 tests and 942 assertions across `body.test.ts`,
+`providers.test.ts`, `search.test.ts`, and `recovery.test.ts`. Tests use injected fixtures, fake
+credentials, temporary SQLite databases, and loopback servers. The new TMDB restrictive-notice check
+initially failed because the adapter accepted metadata carrying a response-wide restriction.
+
+Implementation revision: uncommitted Phase 6 changes based on
+`ffefd0d9f508e36f06a64d70ec6255fe916b2a18`. The implementation snapshot SHA-256 is
+`e1995823374baf0241e59c6f6a1575178078cb5ac304d4aac6cf2973b47944b6`. It covers `.gitignore`,
+`bun.lock`, `apps/search/package.json`, `apps/search/src/**/*.ts`, `apps/search/tests/**/*.ts`, and
+`apps/search/tests/fixtures/**/*.json`, nineteen files total. Sort the paths and hash each UTF-8
+path, a NUL byte, its file bytes, and another NUL byte in sequence. No dependencies or schema
+changes were needed.
+
+T028 reuses the existing Exa notice, optional-field, content-filtering, approval, and redaction
+checks and TMDB fixed-field, missing-date, approval, and redaction checks. New TMDB checks cover all
+five known restrictive codes in both notices and warnings, at response and candidate scope. The
+adapters share the existing bounded notice parser in `src/providers/notices.ts`. Response-wide
+restrictions fail with `metadata_restricted`; candidate restrictions omit only affected candidates
+and remain visible through returned and retained counts. A restricted second resolution endpoint
+publishes no candidates from either endpoint and exposes the policy-review action.
+
+T029 reuses shared-source, pagination, request-filtering, and rejection-count checks. New checks
+prove that later searches returning changed metadata preserve earlier request observations and the
+shared source ID. Missing title, author, publisher, and publication date remain explicit nulls.
+Restricted and invalid result URLs, bodies, highlights, summaries, claims, and notice messages do
+not enter storage, diagnostics, or reads. Injected rights grants are ignored and source permissions
+stay unknown. With both approvals withdrawn, metadata reads return 503 while local summaries,
+including inputs, selections, IDs, counts, status, and actions, remain identical.
+
+T030 source-observation reads remain covered by Phase 4. T031 required only the TMDB notice fix and
+shared parser extraction. `bun run --cwd apps/search test`, `bun run --cwd apps/search check-types`,
+`bun run lint`, `bun run format`, and `git diff --check` pass. Existing ignore rules cover the app's
+artifacts. All sixteen checklist criteria remain checked and unmodified. Both implementation hooks
+are disabled, so no hook or automatic commit ran.
+
+Phase 7 remains unstarted. No source pages were fetched and no live provider calls, permission
+review, relevance scoring, or setup timing were performed. SC-001 through SC-006 remain NOT RUN as
+full-feature acceptance criteria.
 
 ## Prerequisites
 
@@ -340,4 +381,4 @@ step. Pass SC-002 only if all ten identities are correct and at least nine works
 source. Provider-free checks cannot substitute for this result.
 
 Report SC-001 through SC-006 individually as PASS, FAIL, or NOT RUN with evidence. Full-feature
-acceptance remains NOT RUN after Phase 5.
+acceptance remains NOT RUN after Phase 6.
