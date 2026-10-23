@@ -24,6 +24,7 @@ apps/search/**/*.db-*
 
 # Testing
 coverage
+apps/search/acceptance/
 
 # Turbo
 .turbo

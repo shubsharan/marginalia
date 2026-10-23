@@ -18,6 +18,7 @@ import {
   retryOperations,
 } from "./search.ts";
 import { createWorker } from "./worker.ts";
+import { TMDB_CREDITS } from "./providers/tmdb.ts";
 
 function json(value: unknown, status = 200) {
   return Response.json(value, {
@@ -127,6 +128,7 @@ export function startServer({
   app.get("/health", () =>
     json({ storage: { ready: true }, providers: providerReadiness(config) }),
   );
+  app.get("/credits", noQuery, () => json({ tmdb: TMDB_CREDITS }));
   app.post("/v1/search-requests", noQuery, (c) => json(submitRequest(db, c.get("body")), 202));
   app.get("/v1/search-requests", (c) => json(listRequests(db, new URL(c.req.url).searchParams)));
   app.get("/v1/search-requests/:id", noQuery, (c) => json(requestSummary(db, c.req.param("id"))));

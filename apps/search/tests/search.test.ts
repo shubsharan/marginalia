@@ -576,6 +576,17 @@ describe("relational constraints", () => {
 });
 
 describe("loopback HTTP foundation", () => {
+  test("operator credits expose approved TMDB attribution without provider approval", async () => {
+    const { server } = serve();
+    const response = await http(server, { path: "/credits" });
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.text).tmdb).toMatchObject({
+      notice: "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+      providerUrl: "https://www.themoviedb.org",
+    });
+    expect(JSON.parse(response.text).tmdb.logoUrl).toEndWith(".svg");
+    expect((await http(server, { path: "/credits?unexpected=1" })).status).toBe(400);
+  });
   test("health separates storage readiness and provider readiness without secrets or CORS", async () => {
     const { server } = serve();
     expect(server.hostname).toBe("127.0.0.1");
@@ -1780,6 +1791,7 @@ describe("US2 submission and explicit selection", () => {
       providerId: 129,
       eligible: true,
       identityUrl: "https://www.themoviedb.org/movie/129",
+      creditsUrl: "/credits",
     });
     expect(a.attemptId).toBeString();
     expect(a.retrievedAt).toBeString();

@@ -4,11 +4,12 @@
 
 **Input**: `docs/specs/001-search/spec.md`
 
-Status: Tasks T001-T031 are implemented through Phase 6. TMDB resolution, explicit selection,
-bounded Exa execution, saved result reads, retry, crash recovery, and metadata checks are available.
-Phase 7 polish and acceptance work stay planned. Spec Kit reports logical branch `001-search`; the
-actual Git branch includes `feat-`. The simplification pass T037-T040 changes current-candidate
-reads, provider approval, and storage configuration only; it does not implement later Search phases.
+Status: Tasks T001-T040 are complete. TMDB resolution, explicit selection, bounded Exa execution,
+saved reads, retry, crash recovery, provenance, operator credits, and the opt-in live evaluator are
+available. Phase 7 acceptance passed with owner-confirmed permission, automated fresh-checkout
+setup, and explicit human relevance judgments for all ten fixed corpus works. See the quickstart for
+revision-scoped evidence and limitations. Spec Kit reports logical branch `001-search`; the actual
+Git branch includes `feat-`.
 
 ## Summary
 
@@ -42,7 +43,8 @@ separate live acceptance.
 **Project Type**: One backend workspace with an in-process worker.
 
 **Performance Goals**: SC-001 setup and three-work inspection within 30 minutes; SC-002 relevant
-sources for at least 9 of 10 predeclared works. Neither target has been measured.
+sources for at least 9 of 10 predeclared works. Automated setup and the ten-work human-reviewed live
+evaluation passed; see quickstart evidence.
 
 **Constraints**: Metadata only; no source bodies, generated claims, automatic collection expansion,
 public accounts, application pages, or deployment work.
@@ -50,8 +52,8 @@ public accounts, application pages, or deployment work.
 **Scale/Scope**: 1-20 titles/request; 20 identity candidates/input; 20 source results/distinct work;
 one active operation per worker; local reads capped at 100 rows/page.
 
-No unresolved technical choices remain. Deterministic recovery checks pass. Live relevance and
-account permissions remain acceptance prerequisites.
+No unresolved technical choices remain. Deterministic recovery checks pass. Live relevance was
+judged by the owner; the owner confirmed the applicable account agreements.
 
 ## Constitution check
 
@@ -103,7 +105,7 @@ docs/specs/001-search/
 
 [tasks.md](tasks.md) contains the implementation sequence and acceptance checks.
 
-### Planned source code
+### Source code
 
 ```text
 apps/search/
@@ -130,10 +132,10 @@ apps/search/
   tests/live-acceptance.test.ts
 ```
 
-The foundation, US2, US1, and US3 paths exist; live acceptance remains planned. The server owns HTTP
-validation; search owns submit/select/retry/read; the worker dispatches persistent operations; the
-database module owns migrations and transactions. Provider modules validate external responses. No
-repository/service class layers are needed.
+All listed runtime paths and the opt-in live acceptance suite exist. Live capture and owner
+relevance scoring passed. The server owns HTTP validation; search owns submit/select/retry/read; the
+worker dispatches persistent operations; the database module owns migrations and transactions.
+Provider modules validate external responses. No repository/service class layers are needed.
 
 Hono owns route matching and shared access middleware. Zod validates submissions, selections,
 growing-list pagination, provider approval, and metadata without exposing raw validation errors. A
@@ -157,8 +159,9 @@ TypeScript config, formatter, and linter. Direct app commands suffice; this plan
 Turborepo changes.
 
 Sanitized TMDB and Exa fixtures cover resolution and metadata search. The predeclared live
-corpus/relevance rubric remains future work. Preserve unrelated working-tree changes. This
-simplification adds no dependencies, public hosting, UI, or additional Search phases.
+corpus/relevance rubric and capture/score evaluator are implemented; live quality remains
+unverified. Preserve unrelated working-tree changes. This simplification adds no dependencies,
+public hosting, UI, or additional Search phases.
 
 ## Validation coverage
 
@@ -172,7 +175,8 @@ simplification adds no dependencies, public hosting, UI, or additional Search ph
 | SC-001 to SC-006 | Timed setup, ten-work live evaluation, ambiguity, duplicates/restart, coverage, provenance audit               |
 
 Use [quickstart.md](quickstart.md) for acceptance and [tasks.md](tasks.md) for foundational test
-evidence. Full-feature acceptance remains NOT RUN.
+evidence. Full-feature acceptance is recorded with separate deterministic, live, and human-review
+evidence.
 
 ## Complexity tracking
 

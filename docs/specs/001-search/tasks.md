@@ -7,9 +7,10 @@
 [provider contract](contracts/providers.md), and [quickstart.md](quickstart.md). Follow
 `.specify/memory/constitution.md` version 3.0.0.
 
-**Status**: Search is implemented through Phase 6. Simplification tasks T037-T040 and tasks
-T001-T031 are complete. Phase 7 polish and acceptance stay planned. Current verification is recorded
-in [quickstart.md](quickstart.md).
+**Status**: Phases 1-7 and simplification tasks T037-T040 are complete. T035 records owner-confirmed
+provider permission, and T036 records automated live setup, the fixed ten-work capture, and explicit
+human relevance judgments. Evidence lanes and limitations are recorded in
+[quickstart.md](quickstart.md).
 
 **Historical Phase 3 evidence**: On 2026-10-23, Bun 1.4.2 passed 82 tests and 408 assertions against
 sanitized fixtures, temporary databases, and loopback HTTP servers. US2 checks cover bounded TMDB
@@ -303,30 +304,30 @@ source ingestion, extraction, or permission inference is introduced.
 
 **Purpose**: Verify the whole deliverable, its setup instructions, and live acceptance separately.
 
-- [ ] T032 [P] Add the predeclared ten-work corpus and relevance rubric in
+- [x] T032 [P] Add the predeclared ten-work corpus and relevance rubric in
       `apps/search/tests/fixtures/live-corpus.json` and the opt-in evaluator in
       `apps/search/tests/live-acceptance.test.ts`. Include TMDB media-type/ID identities,
       film/series, remakes, and aliases; require explicit live opt-in, reviewed metadata policy,
       credentials, and recorded human relevance judgments. Version the corpus before running;
       missing judgments/evidence must not count as a pass, and ordinary tests must exclude this
       suite.
-- [ ] T033 [P] Reconcile `README.md`, `docs/roadmap.md`, and `docs/specs/001-search/quickstart.md`
+- [x] T033 [P] Reconcile `README.md`, `docs/roadmap.md`, and `docs/specs/001-search/quickstart.md`
       with implemented commands, endpoints, limits, startup/recovery behavior, and permission-policy
       setup. Add operator credits with the approved TMDB logo and required attribution notice linked
       from provider provenance. Keep credentials out of examples and retain distinct planned,
       deterministic, and live evidence labels. Remove obsolete claims about nonexistent runtime
       components only after checking actual files.
-- [ ] T034 Run the complete deterministic suites in `apps/search/tests/search.test.ts`,
+- [x] T034 Run the complete deterministic suites in `apps/search/tests/search.test.ts`,
       `apps/search/tests/providers.test.ts`, and `apps/search/tests/recovery.test.ts`, app
       `check-types`, repository lint, and formatting checks. Fix failures in their owning files,
       verify no accidental production dependencies or unrequested features, and record
       commands/results/revision in `docs/specs/001-search/quickstart.md`.
-- [ ] T035 Verify actual provider retention/display permission for the complete fixed metadata
+- [x] T035 Verify actual provider retention/display permission for the complete fixed metadata
       contract and record references, revision, and review dates in
       `apps/search/metadata-policy.json` before any live retention. If account permission evidence
       is unavailable, leave the affected provider disabled and record the exact blocker in
       `docs/specs/001-search/quickstart.md`; fixtures are not permission evidence.
-- [ ] T036 Execute fresh-checkout setup and the live workflow in
+- [x] T036 Execute fresh-checkout setup and the live workflow in
       `docs/specs/001-search/quickstart.md` after T032-T035, using
       `apps/search/tests/live-acceptance.test.ts` and the unchanged versioned corpus. Record setup
       time, correct identities for all ten works, reviewer relevance for at least nine, permitted

@@ -17,10 +17,11 @@ that real data.
   need not wait.
 - Each feature owns a complete workflow: its writes, reads, and failure behavior. Backend features
   are usable without application pages; their graphical interface arrives with the application.
-- Search is partially implemented through local title resolution, explicit selection, bounded source
-  search, and saved reads. Retry, crash recovery, and full live acceptance remain planned, as do the
-  remaining features. Stack, providers, schemas, and extraction methods are chosen in feature plans.
-  The [search spec](specs/001-search/spec.md) covers backend feature 1.
+- Search implements local title resolution, explicit selection, bounded source search, saved reads,
+  selective retry, crash recovery, and metadata provenance. Phase 7 acceptance passed with automated
+  live setup and owner-reviewed relevant references for all ten corpus works. The remaining features
+  stay planned. Stack, providers, schemas, and extraction methods are chosen in feature plans. The
+  [search spec](specs/001-search/spec.md) covers backend feature 1.
 
 ## Backend features
 

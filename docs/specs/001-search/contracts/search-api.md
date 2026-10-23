@@ -1,9 +1,14 @@
 # Local search API
 
-JSON API at `http://127.0.0.1:4310`. Phase 5 implements health, submission, request summary,
+JSON API at `http://127.0.0.1:4310`. Phases 1-6 implement health, submission, request summary,
 candidate listing, selection, search execution, saved lists, stable work/source reads, and paginated
 source observations, retry, and recovery. Public hosting and the full knowledge-query API are
 outside this feature.
+
+`GET /credits` returns TMDB's required notice, approved logo URL, provider URL, and attribution
+requirements URL. It accepts no query parameters and needs no provider approval or credentials.
+Candidate and work metadata include `creditsUrl: "/credits"` beside identity provenance. The
+[operator credits](../../../../README.md#credits) display the approved logo and required notice.
 
 Hono routes requests through shared access checks; Zod schemas validate boundary data. Validation
 responses expose field paths and local codes, never raw library errors or input values. Internal

@@ -4,6 +4,14 @@ import { boundedText, calendarDateSchema, LIMITS, type Config } from "../config.
 import { readBoundedJson } from "../body.ts";
 import { noticeCodes, restrictiveNotices } from "./notices.ts";
 
+export const TMDB_CREDITS = {
+  notice: "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+  providerUrl: "https://www.themoviedb.org",
+  logoUrl:
+    "https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg",
+  requirementsUrl: "https://developer.themoviedb.org/docs/faq",
+};
+
 const workTypeSchema = z.enum(["film", "television_series"]);
 export const resolutionInputSchema = z.strictObject({
   title: z

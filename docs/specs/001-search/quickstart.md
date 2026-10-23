@@ -1,9 +1,9 @@
 # Validate search
 
-This is the implementation acceptance guide. Phase 6 verifies metadata provenance and adds TMDB
-restrictive-notice handling to the implemented resolution, selection, Exa Search, saved reads,
-retry, and recovery. Phase 7 polish and full acceptance stay planned. No live provider or permission
-claim follows from the fixture results.
+This is the implementation acceptance guide. Phases 1-7 implement and verify resolution, explicit
+selection, Exa Search, saved reads, retry, recovery, provenance, and live acceptance. The project
+owner confirmed the applicable provider agreements and reviewed references for all ten corpus works.
+Deterministic, automated live setup, and human relevance evidence are recorded separately below.
 
 ## Historical Phase 3 verification
 
@@ -201,11 +201,12 @@ available search credits. Before live retention, review provider metadata permis
 their basis, review date, and revision in `apps/search/metadata-policy.json`. Approval covers the
 complete fixed stored/displayed field set in the provider contract. Legacy field-list policies are
 rejected; review the full fixed set before removing their arrays and recording renewed approval. The
-committed template remains unreviewed. Restart the app after policy changes. TMDB usage requires an
-API Read Access Token and applicable retention/display permission and attribution; commercial use
-requires the relevant license. Include the approved TMDB logo and required attribution notice in the
-operator credits according to the [TMDB FAQ](https://developer.themoviedb.org/docs/faq). Metadata
-permissions do not cover linked source pages. See [provider contracts](contracts/providers.md).
+checked-in policy records owner-confirmed permission for the project accounts. Restart the app after
+policy changes. TMDB usage requires an API Read Access Token and applicable retention/display
+permission and attribution; commercial use requires the relevant license. Include the approved TMDB
+logo and required attribution notice in the operator credits according to the
+[TMDB FAQ](https://developer.themoviedb.org/docs/faq). Metadata permissions do not cover linked
+source pages. See [provider contracts](contracts/providers.md).
 
 The app commands below also appear in the root README. Store secrets only in the ignored
 `apps/search/.env.local`, copied from the committed `.env.example`. Set `EXA_API_KEY` and
@@ -364,21 +365,164 @@ retention.
 
 ## Measure live quality separately
 
-Before the first live run, commit a ten-work corpus with known TMDB media-type/ID identities,
-title/year/type, and a review rubric. Include film and television, remakes, and aliases. Do not
-change the corpus after seeing results. A relevant source must address the intended work and offer
-substantive criticism, analysis, an interview, or production context; a title match alone is
-insufficient.
+The predeclared corpus and rubric are in `apps/search/tests/fixtures/live-corpus.json`, version
+`search-v1`. Ten distinct identities cover film, series, the 1972 and 2002 Solaris remakes, and
+Japanese/Korean title aliases. Commit the corpus and rubric before live capture. Capture verifies
+the corpus bytes against HEAD; do not edit it after seeing results. Other working changes do not
+require a commit. The run records the corpus SHA-256 and the HEAD revision with an implementation
+snapshot digest covering app source, tests, fixtures, migrations, package, policy, and the root
+lockfile.
+
+After obtaining credentials and reviewed permission for both providers, create the parent output
+directory and choose a new, absent run directory. From the repository root:
 
 ```sh
-bun run --cwd apps/search test:live
+mkdir -p apps/search/acceptance
+MARGINALIA_LIVE_ACCEPTANCE=1 MARGINALIA_LIVE_MODE=capture \
+  MARGINALIA_LIVE_RUN_DIR="$PWD/apps/search/acceptance/run-001" \
+  bun run --cwd apps/search test:live
 ```
 
-This opt-in command uses real services and may incur Exa charges. Record revision, corpus version,
-date, selected identities, queries, notices, failures, time, and permitted source references. A
-human may review linked sources outside the application to score relevance; this is not an ingestion
-step. Pass SC-002 only if all ten identities are correct and at least nine works have a relevant
-source. Provider-free checks cannot substitute for this result.
+Capture uses real providers and may incur Exa charges. It creates fresh SQLite storage without
+changing the configured runtime database. It uses the production submission, selection, and
+saved-read functions and serial worker; HTTP routing is tested separately by deterministic checks.
+Expected namespace/ID pairs are explicitly selected from saved eligible candidates. A missing
+identity stops the run before any source search. There are no automatic retries.
 
-Report SC-001 through SC-006 individually as PASS, FAIL, or NOT RUN with evidence. Full-feature
-acceptance remains NOT RUN after Phase 6.
+`evidence.json` records the corpus hash, revision, policy revision, capture time, selected
+identities, coverage states, and permitted returned URLs. `snapshot.json` retains the final summary,
+source associations, queries, ranks, notices, and observation times. The SQLite database retains
+candidates, attempts, and failures. All run artifacts under `apps/search/acceptance/` are ignored by
+Git.
+
+A capture exits unsuccessfully with **SC-002 NOT RUN** until a human reviews it. Fill every entry in
+`judgments.json`, including `reviewer`, an ISO UTC `reviewedAt`, boolean `relevant`, and a short
+`reason`. A positive judgment must cite a `sourceUrl` returned for that exact work. Negative
+judgments may use null for `sourceUrl`. Do not put source text or credentials into artifacts. The
+rubric requires substantive criticism, analysis, interviews, or production context about the exact
+work; title-only matches, listings, and references about a different remake do not count.
+
+Run scoring against the same directory without repeating paid provider calls:
+
+```sh
+MARGINALIA_LIVE_ACCEPTANCE=1 MARGINALIA_LIVE_MODE=score \
+  MARGINALIA_LIVE_RUN_DIR="$PWD/apps/search/acceptance/run-001" \
+  bun run --cwd apps/search test:live
+```
+
+Score mode needs current metadata approval but no credentials. Missing or malformed evidence,
+judgments for another run/corpus, duplicate identities, and positive judgments citing an unreturned
+URL cannot pass. SC-002 passes only with all ten intended identities and at least nine relevant
+works. Archive the scoring command's exit status and output alongside the artifacts. No automated
+score establishes SC-001 or the other acceptance criteria.
+
+For SC-001, start a separate timer at a fresh checkout, follow the documented three-title HTTP
+workflow, and stop it only after inspecting saved results. Record start/end UTC times, elapsed
+minutes, checkout revision, request ID, and artifact paths. Capture duration alone excludes setup
+and cannot establish the 30-minute target. Follow the restart, retry, and boundary scenarios in this
+guide and the deterministic acceptance matrix for the remaining criteria.
+
+## Initial Phase 7 deterministic verification
+
+On 2026-10-23, Bun 1.4.2 passed 150 tests and 959 assertions across `body.test.ts`,
+`providers.test.ts`, `search.test.ts`, `recovery.test.ts`, and `live-evaluation.test.ts`. The
+scoring checks reject absent reviews, mismatched corpus/request IDs, blank reviewer names, reviews
+predating capture, duplicate identities, incomplete judgments, and positive judgments citing
+unreturned URLs. Eight relevant works fail; nine pass with ten confirmed identities. A subprocess
+check proves that the live suite exits unsuccessfully before provider configuration or calls when
+explicit opt-in is absent. This is a guard check, not live execution.
+
+Implementation revision: uncommitted Phase 7 changes based on `02904f3` with implementation snapshot
+SHA-256 `f818906e62b679c08402f61bfb69f00afe0b72292cd365ab2a613452d8f8ae05`. The digest covers
+`.gitignore`, `bun.lock`, `apps/search/package.json`, `apps/search/src/**/*.ts`,
+`apps/search/tests/**/*.ts`, and `apps/search/tests/fixtures/**/*.json`, 23 files total. Sort paths
+and hash each UTF-8 path, NUL byte, file bytes, and NUL byte in sequence.
+
+`bun install --frozen-lockfile`, `bun run --cwd apps/search test`,
+`bun run --cwd apps/search check-types`, `bun run lint`, `bun run format`, and `git diff --check`
+pass. No dependency or migration changes were needed. API checks cover `/credits` without provider
+approval and provenance links to it. README, roadmap, and operator instructions now match the
+implemented retry, recovery, metadata gates, and evaluator. Existing ignores cover local env,
+SQLite/WAL/SHM, build output, dependencies, and logs; the ignored acceptance directory contains live
+artifacts. The private workspace needs no publishing ignore file. No Docker, Terraform, Helm, or
+ESLint configuration is present. Oxfmt and Oxlint already ignore generated directories.
+
+At that initial checkpoint, all sixteen checklist criteria remained checked and unmodified, hooks
+were disabled, and no automatic commit or live run had occurred. The subsequent corpus commit and
+live acceptance below supersede that checkpoint's NOT RUN status. Application source-page retrieval
+remains excluded.
+
+## Phase 7 live verification
+
+On 2026-10-23, the project owner confirmed that the applicable TMDB and Exa agreements cover the
+intended use and instructed continuation without agreement copies. Policy revision
+`owner-confirmed-2026-10-23-v1` records that attestation and its date. Agreement text was not
+independently reviewed. Both credentials are configured in the ignored `apps/search/.env.local`. No
+credential values were printed or retained in acceptance artifacts.
+
+The unchanged `search-v1` corpus and rubric were committed as
+`0f0aac6ff18d3479f8cabf876a810e02ff65d19b` before any live evaluation. Corpus SHA-256:
+`d3320e0480052b1189ea9f83478c6e724d470e1e8b78a945d900ea21413f7ca1`. The live implementation revision
+is
+`0f0aac6ff18d3479f8cabf876a810e02ff65d19b+snapshot:5c0a15cdf292bf37ad1fcc248a4e973755bf4ed14fc1233ca945aadb1bf48994`.
+This includes the uncommitted implementation snapshot; it is not a claim that all Phase 7 changes
+were committed. The snapshot hashes sorted app-relative paths and bytes, separated by NUL bytes,
+then the root `bun.lock` bytes.
+
+Capture ran from `2026-10-23T16:37:41.330Z` to `2026-10-23T16:38:03.273Z`. All ten expected TMDB
+namespace/ID pairs resolved and were selected explicitly; no work membership existed before
+selection. All ten resolution and ten Exa operations succeeded. Searches returned 20 results per
+work, retained 200 observations across 199 distinct source URLs, and rejected zero results. Every
+search exposed `result_limit_reached`; this is bounded discovery, not exhaustive coverage. No source
+pages were retrieved by the application.
+
+The owner then explicitly confirmed after reviewing the first references in all ten sections of
+`review.html` that each offers substantive material about the exact selected work. Those exact
+returned URLs, the owner's confirmation, and review timestamp `2026-10-23T16:40:32.857Z` are
+recorded in `judgments.json`. Score mode passed with ten relevant works and no repeated provider
+calls. The capture command's nonzero exit was the intentional human-review gate, not a provider
+failure. Scoring exited zero.
+
+A separate fresh local Git clone of `0f0aac6ff18d3479f8cabf876a810e02ff65d19b` followed the
+documented three-title HTTP workflow for Heat, Arrival, and Breaking Bad. Timing included clone,
+frozen installation, configuring the existing account credentials and owner-confirmed policy,
+migration, startup, explicit candidate selection, and saved work/source/observation inspection. It
+took 6.79 seconds, below 30 minutes. This automated run used already-provisioned service access;
+human onboarding and typing time were not measured. The checkout ran the committed Phase 6 runtime
+plus the frozen corpus, not the uncommitted Phase 7 credits/evaluator changes. The ten-work capture
+separately tested the current implementation snapshot.
+
+The three-title run saved 60 references and 60 observations. Restarting the same database without
+credentials returned identical summaries, works, sources, and observations, and created no extra
+provider attempts. Temporary checkout and copied credentials were removed after verification. The
+retained SQLite copy contains results only.
+
+Saved metadata checks covered all 199 live sources and 200 observations: each is an unverified
+candidate with unknown source-content permissions, selected-work association, query, rank, provider,
+and observation time. No source-body, highlights, summary, or claims fields appeared in
+observations. Real credential values were absent from retained JSON and SQLite artifacts.
+Deterministic tests supply the controlled failure, retry, process-crash, late-response, validation,
+and content-filtering cases; live providers were not deliberately fault-injected.
+
+Final checks passed with Bun 1.4.2: 150 deterministic tests, 959 assertions, app type-check,
+repository lint, formatting, and diff checks. No dependencies or migrations changed. Implementation
+hooks remain disabled.
+
+Live artifacts are local and ignored under `apps/search/acceptance/`:
+
+- `run-001/evidence.json`, `snapshot.json`, and `search.sqlite` preserve the ten-work capture.
+- `run-001/review.html`, `proposed-references.json`, and `judgments.json` preserve the references
+  presented to the owner and the resulting human judgments.
+- `run-001/capture.log` and `score.log` record the intentional review gate and subsequent score
+  pass.
+- `setup-001/evidence.json`, `search.sqlite`, and `runtime.log` record fresh-checkout setup and
+  restart without credentials.
+
+| Criterion | Status | Evidence                                                                                                                |
+| --------- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| SC-001    | PASS   | Automated fresh-checkout three-title HTTP setup and inspection in 6.79s with provisioned access.                        |
+| SC-002    | PASS   | Ten correct identities; owner-reviewed relevance for all ten works; score mode passed.                                  |
+| SC-003    | PASS   | Deterministic ambiguity/unmatched/conflict checks plus live explicit selection with no premature memberships.           |
+| SC-004    | PASS   | Deterministic crash/retry/repeated-request checks plus identical live saved reads after restart with no extra attempts. |
+| SC-005    | PASS   | Deterministic empty/failure/partial/interruption/selective-retry checks plus live result caps and counts.               |
+| SC-006    | PASS   | Deterministic content filtering plus provenance and metadata checks across all live saved sources/observations.         |

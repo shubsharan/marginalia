@@ -4,10 +4,11 @@ Search for research-source candidates about a collection of films and television
 JSON API resolves titles through TMDB, waits for your explicit selections, queries Exa Search, and
 saves source metadata and provenance in SQLite. It never retrieves source pages or generates claims.
 
-Phase 5 implements submission, confirmation, search, saved reads, selective retry, and crash
-recovery. Remaining metadata checks and full live acceptance stay planned. See the
-[acceptance guide](docs/specs/001-search/quickstart.md) for recorded evidence and the
-[API contract](docs/specs/001-search/contracts/search-api.md) for limits and response meanings.
+Phases 1-7 are implemented and verified. Live acceptance resolved all ten corpus identities and
+passed with owner-reviewed relevant references for all ten works. See the
+[acceptance guide](docs/specs/001-search/quickstart.md) for deterministic, live, and human-review
+evidence, and the [API contract](docs/specs/001-search/contracts/search-api.md) for response
+meanings.
 
 ## Set up local search
 
@@ -28,11 +29,13 @@ Set `TMDB_READ_ACCESS_TOKEN` and `EXA_API_KEY` in the ignored `apps/search/.env.
 Review retention and display of the complete fixed field set in the
 [provider contract](docs/specs/001-search/contracts/providers.md). In
 `apps/search/metadata-policy.json`, record a new `revision` and each provider's `reviewedAt` date
-and `permissionBasis` reference. The committed template is unreviewed and blocks calls and metadata
-reads. Do not approve it using test-fixture permissions. Legacy `retainedFields` and
-`displayedFields` arrays are rejected. Restart after changing policy. Follow the
-[TMDB FAQ](https://developer.themoviedb.org/docs/faq) for the applicable attribution, logo, and
-licensing requirements. Metadata approval does not grant rights to source-page content.
+and `permissionBasis` reference. The checked-in policy records the project owner's confirmation of
+agreements for these accounts. Other operators must establish the permission basis applicable to
+their own accounts. Missing or invalid policy blocks calls and metadata reads. Do not approve it
+using test-fixture permissions. Legacy `retainedFields` and `displayedFields` arrays are rejected.
+Restart after changing policy. Follow the [TMDB FAQ](https://developer.themoviedb.org/docs/faq) for
+the applicable attribution, logo, and licensing requirements. Metadata approval does not grant
+rights to source-page content.
 
 With the server stopped, initialize or migrate the database, then start:
 
@@ -144,5 +147,20 @@ bun run format
 
 Ordinary tests use fixtures, temporary databases, and loopback servers. They make no live provider
 calls. Recovery tests kill a child worker and separately release stale responses from surviving
-workers. Live quality, permissions, and setup timing remain unverified. The opt-in live suite is
-planned for Phase 7.
+workers. The owner-confirmed permission basis, live quality review, and automated setup timing are
+recorded in the acceptance guide; agreement text was not independently reviewed. The
+[live acceptance workflow](docs/specs/001-search/quickstart.md#measure-live-quality-separately)
+captures a committed ten-work corpus, then scores human judgments without repeating provider calls.
+
+## Credits
+
+<a href="https://www.themoviedb.org"><img alt="TMDB" width="100" src="https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"></a>
+
+This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+The logo is an unmodified [approved TMDB logo](https://www.themoviedb.org/about/logos-attribution).
+Candidate and work provenance link to `/credits`, a local JSON endpoint with the attribution notice,
+official logo URL, provider link, and
+[attribution requirements](https://developer.themoviedb.org/docs/faq). Exa supplies search metadata;
+source locations and search observations preserve its provenance. Attribution does not establish
+account permission or rights to source content.
